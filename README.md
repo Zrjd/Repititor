@@ -22,6 +22,7 @@ TTS/STT и оценка произношения.
 
 ```
 Repetitor.sln
+web/                              - React 19 SPA (Vite, TypeScript, React Router, TanStack Query)
 src/Repetitor.Api/
   Program.cs                     — composition root, pipeline, health checks
   Api/                           — контроллеры, DTO, validation
@@ -34,7 +35,7 @@ src/Repetitor.Api/
     Services/                    — SRS, RAG, embeddings, упражнения, grading, tutor, speech
 deploy/init.sql                  — SQL-скрипт начальной схемы
 tests/Repetitor.Api.Tests/       — unit-тесты
-docker-compose.yml               — PostgreSQL/pgvector + API (+ Ollama по профилю)
+docker-compose.yml               — PostgreSQL/pgvector + API + Web UI (+ Ollama по профилю)
 ```
 
 ## Быстрый старт (Docker Compose)
@@ -62,6 +63,12 @@ docker-compose.yml               — PostgreSQL/pgvector + API (+ Ollama по п
 
 4. Swagger UI: <http://localhost:8080/swagger>
 
+5. Web UI (React SPA) — <http://localhost:8081>:
+
+   ```bash
+   docker compose up -d --build web
+   ```
+
 Локальный AI через Ollama (профиль `ai-local`, требует ~4 ГБ RAM):
 
 ```bash
@@ -69,6 +76,20 @@ docker compose --profile ai-local up -d
 docker compose exec ollama ollama pull llama3.1
 docker compose exec ollama ollama pull nomic-embed-text
 ```
+
+## Web UI
+
+`web/` — React 19 SPA (Vite, TypeScript, React Router, TanStack Query) для ядра API: вход и
+регистрация, дашборд, каталог курсов и уроки, грамматика, словарь, мои слова и SRS-сессия.
+Интерфейс русский/английский, язык сохраняется в браузере.
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5173, /api проксируется на http://localhost:8080
+```
+
+Подробности, скрипты и переменные окружения — в [`web/README.md`](web/README.md).
 
 ## Быстрый старт (без Docker)
 

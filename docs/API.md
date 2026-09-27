@@ -25,8 +25,9 @@
 | POST | `/auth/forgot-password` | `email` | 202 (всегда, без утечки существования email) |
 | POST | `/auth/reset-password` | `email`, `token`, `newPassword` | 204 |
 
-`AuthResponse`: `accessToken`, `refreshToken`, `expiresAtUtc`, `user` (id, email, displayName,
-role, targetLanguage, cefrLevel, dailyGoal...).
+`AuthResponse`: `accessToken`, `refreshToken`, `tokenType`, `expiresInSeconds`, `expiresAt`, `user`
+(id, email, displayName, role, targetLanguageId/Code/Name, interfaceLanguageId, level, targetLevel,
+dailyGoalXp, speechRate, totalXp, currentStreak, longestStreak, emailConfirmed, createdAt).
 
 `POST /auth/refresh` ротирует refresh-токен: предыдущий токен отзывается, повторное
 использование возвращает 401.
@@ -40,13 +41,13 @@ role, targetLanguage, cefrLevel, dailyGoal...).
 | GET | `/users/me/dashboard?activityDays=` | агрегаты для главного экрана |
 | GET | `/users/me/stats?days=` | серия, streak, активность по дням |
 | GET | `/users/me/goal` | дневная цель и прогресс |
-| PATCH | `/users/me/goal` | изменить дневную цель |
+| PATCH | `/users/me` | изменить дневную цель: `dailyGoalXp` (у `/users/me/goal` только GET) |
 
 ## catalog
 
-`GET /catalog/languages`, `GET /catalog/languages/{code}`, `GET /catalog/courses`,
+`GET /catalog/languages`, `GET /catalog/languages/{code}`, `GET /catalog/courses?languageId=&level=`,
 `GET /catalog/courses/{slug}`, `GET /catalog/courses/{slug}/lessons`, `GET /catalog/lessons/{lessonId}`,
-`GET /catalog/grammar`, `GET /catalog/grammar/{id}`.
+`GET /catalog/grammar?languageId=&maxLevel=`, `GET /catalog/grammar/{id}`.
 
 ## dictionary
 
@@ -72,9 +73,9 @@ role, targetLanguage, cefrLevel, dailyGoal...).
 | GET/POST | `/decks`, GET/PATCH/DELETE `/decks/{id}` | SRS-колоды |
 | GET/POST/DELETE | `/decks/{id}/cards[/{lexicalUnitId}]` | карточки колоды |
 | POST | `/decks/{id}/reset-progress` | сброс прогресса |
-| GET | `/practice/due?limit=` | карточки к повторению → `{cards, totalDue, limit}` |
+| GET | `/practice/due?limit=&deckId=` | карточки к повторению → `{cards, totalDue, limit}` |
 | GET | `/practice/due/count` | только количество |
-| GET | `/practice/forecast?days=` | нагрузка по дням |
+| GET | `/practice/forecast?deckId=` | нагрузка по дням + `remainingDue` |
 | POST | `/practice/reviews` | `{ reviews: [{ reviewCardId, rating: Again\|Hard\|Good\|Easy, durationMs, givenAnswer }], sessionNewCards }` → `[{ reviewCardId, state, dueAt, intervalDays, easeFactor, wasCorrect, masteryScore, correctTranslation, xpEarned }]` |
 | POST | `/practice/summary` | итоги сессии |
 | POST | `/practice/suspend/{reviewCardId}` | отложить карточку |

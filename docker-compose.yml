@@ -82,6 +82,18 @@ services:
     volumes:
       - media:/app/media
 
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: repetitor/web:local
+    container_name: repetitor-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8081}:80"
+
 volumes:
   pgdata:
   ollama:
