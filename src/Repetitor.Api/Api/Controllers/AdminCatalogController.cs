@@ -242,9 +242,12 @@ public sealed class AdminCatalogController(
     public async Task<ActionResult<GenerateLessonContentResponse>> GenerateLesson(
         Guid id, [FromBody] GenerateLessonContentRequest request, CancellationToken ct)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var lesson = await db.Lessons.AsNoTracking().FirstOrDefaultAsync(l => l.Id == id, ct)
+            ?? throw new InvalidOperationException("Lesson not found");
         var lessonPrompt = await LoadLessonPromptAsync(ct);
         var result = await contentGeneration.GenerateLessonAsync(
-            id, request.Topic, request.Level, request.Requirements, request.Provider, request.Model, lessonPrompt, ct);
+            lesson.CourseId, request.Topic, request.Level, request.Requirements, request.Provider, request.Model, lessonPrompt, request.DurationMinutes, request.Summary, ct);
 
         return Ok(new GenerateLessonContentResponse(
             result.Title, result.Summary, result.ContentMarkdown, result.KeyVocabulary,

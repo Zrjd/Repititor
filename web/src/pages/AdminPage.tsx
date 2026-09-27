@@ -378,9 +378,15 @@ function LessonForm({
   const [keyVocabulary, setKeyVocabulary] = useState((lesson?.keyVocabulary ?? []).join(', '))
   const [generating, setGenerating] = useState(false)
   const [generateTopic, setGenerateTopic] = useState('')
+  const [generateDuration, setGenerateDuration] = useState<number | undefined>(undefined)
+  const [generateSummary, setGenerateSummary] = useState('')
 
   const generateMutation = useMutation({
-    mutationFn: () => adminApi.generateLesson(lesson?.id ?? courseId!, { topic: generateTopic || undefined }),
+    mutationFn: () => adminApi.generateLesson(lesson?.id ?? courseId!, {
+      topic: generateTopic || undefined,
+      durationMinutes: generateDuration,
+      summary: generateSummary || undefined,
+    }),
     onSuccess: (result) => {
       setTitle(result.title)
       setSummary(result.summary ?? '')
@@ -419,6 +425,25 @@ function LessonForm({
             value={generateTopic}
             onChange={(e) => setGenerateTopic(e.target.value)}
             placeholder={t('admin.generateLessonHint')}
+          />
+        </label>
+        <label>
+          {t('admin.generateLessonDuration')}
+          <input
+            type="number"
+            min={5}
+            max={180}
+            value={generateDuration ?? ''}
+            onChange={(e) => setGenerateDuration(e.target.value ? Number(e.target.value) : undefined)}
+            placeholder={t('admin.generateLessonDurationHint')}
+          />
+        </label>
+        <label>
+          {t('admin.generateLessonSummary')}
+          <input
+            value={generateSummary}
+            onChange={(e) => setGenerateSummary(e.target.value)}
+            placeholder={t('admin.generateLessonSummaryHint')}
           />
         </label>
         <button
@@ -528,6 +553,7 @@ function AiTab() {
             defaultChatModel: fd.get('defaultChatModel') as string,
             temperature: Number(fd.get('temperature')),
             maxOutputTokens: Number(fd.get('maxOutputTokens')),
+            lessonPrompt: fd.get('lessonPrompt') as string,
             providers: data.providers.map((p) => ({
               name: p.name,
               kind: p.kind,
@@ -574,6 +600,16 @@ function AiTab() {
             <input name="maxOutputTokens" type="number" min="64" max="8000" defaultValue={data.maxOutputTokens} />
           </label>
         </div>
+
+        <label>
+          {t('admin.aiLessonPrompt')}
+          <textarea
+            name="lessonPrompt"
+            rows={8}
+            defaultValue={data.lessonPrompt}
+            placeholder={t('admin.aiLessonPromptHint')}
+          />
+        </label>
 
         <h3>{t('admin.aiProvider')}</h3>
         {data.providers.map((p) => (

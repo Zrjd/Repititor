@@ -36,6 +36,9 @@ public interface IContentGenerationService
         string? requirements,
         string? provider,
         string? model,
+        string? lessonPrompt = null,
+        int? durationMinutes = null,
+        string? summary = null,
         CancellationToken ct = default);
 
     Task<CourseContentGeneration> GenerateCourseAsync(
@@ -62,6 +65,9 @@ public sealed class ContentGenerationService(
         string? requirements,
         string? provider,
         string? model,
+        string? lessonPrompt = null,
+        int? durationMinutes = null,
+        string? summary = null,
         CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -72,7 +78,7 @@ public sealed class ContentGenerationService(
         var interfaceLang = await db.Languages.OrderBy(l => l.SortOrder).ThenBy(l => l.Code).FirstAsync(ct);
         var lessonLevel = level ?? course.Level;
 
-        var system = $$"""
+        var system = lessonPrompt ?? $$"""
             You are an expert {{target.NameEnglish}} course author. Write a full lesson for CEFR {{lessonLevel}} learners.
             The learner's interface language is {{interfaceLang.NameEnglish}}.
             Return a single valid JSON object with this exact shape:
@@ -89,6 +95,8 @@ public sealed class ContentGenerationService(
             Course: {course.Title}
             Topic: {topic ?? "choose a fitting topic for this course and level"}
             Level: CEFR {lessonLevel}
+            {(durationMinutes is > 0 ? $"Duration: {durationMinutes} minutes" : "")}
+            {(string.IsNullOrWhiteSpace(summary) ? "" : $"Summary: {summary}")}
             {(string.IsNullOrWhiteSpace(requirements) ? "" : $"Requirements: {requirements}")}
             """;
 

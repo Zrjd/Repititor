@@ -141,7 +141,7 @@ export const adminApi = {
   }) => api.post<AdminLesson>('/admin/lessons', data),
   updateLesson: (id: string, data: Partial<AdminLesson>) => api.put<AdminLesson>(`/admin/lessons/${id}`, data),
   deleteLesson: (id: string) => api.delete<void>(`/admin/lessons/${id}`),
-  generateLesson: (id: string, data: { topic?: string; level?: CefrLevel; requirements?: string }) =>
+  generateLesson: (id: string, data: { topic?: string; level?: CefrLevel; requirements?: string; durationMinutes?: number; summary?: string }) =>
     api.post<GenerateLessonContent>(`/admin/lessons/${id}/generate`, data),
   generateCourse: (id: string, data: { topic?: string; level?: CefrLevel; lessonsCount: number }) =>
     api.post<GenerateCourseContent>(`/admin/courses/${id}/generate`, data),
@@ -152,6 +152,7 @@ export const adminApi = {
     defaultChatModel?: string
     temperature?: number
     maxOutputTokens?: number
+    lessonPrompt?: string
     providers?: Array<{
       name: string
       kind?: string

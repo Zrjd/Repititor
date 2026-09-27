@@ -94,6 +94,8 @@ public sealed class GenerateLessonContentRequest
     [StringLength(128)] public string? Model { get; set; }
     public CefrLevel? Level { get; set; }
     [StringLength(2000)] public string? Requirements { get; set; }
+    [Range(5, 180)] public int? DurationMinutes { get; set; }
+    [StringLength(500)] public string? Summary { get; set; }
 }
 
 public sealed record GenerateLessonContentResponse(
@@ -130,6 +132,7 @@ public sealed class AiSettingsResponse
     public string DefaultChatModel { get; set; } = string.Empty;
     public double Temperature { get; set; } = 0.7;
     public int MaxOutputTokens { get; set; } = 1200;
+    public string LessonPrompt { get; set; } = string.Empty;
     public List<AiProviderSettingsResponse> Providers { get; set; } = [];
 }
 
@@ -155,6 +158,7 @@ public sealed class UpdateAiSettingsRequest
     [StringLength(128)] public string? DefaultChatModel { get; set; }
     [Range(0.0, 2.0)] public double? Temperature { get; set; }
     [Range(64, 8000)] public int? MaxOutputTokens { get; set; }
+    [StringLength(8000)] public string? LessonPrompt { get; set; }
     public List<UpdateAiProviderRequest>? Providers { get; set; }
 }
 
