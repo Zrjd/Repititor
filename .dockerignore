@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.user
+**/media/
+.git/
+.gitignore
+.env
+README.md
+docs/
+Repetitor/
+docker-compose*.yml

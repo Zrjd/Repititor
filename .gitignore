@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+media/
+.env
+TestResults/
+
+# Legacy MVC prototype, superseded by src/Repetitor.Api
+Repetitor/

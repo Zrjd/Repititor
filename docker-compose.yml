@@ -1,0 +1,88 @@
+name: repetitor
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: repetitor-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-repetitor}
+      POSTGRES_USER: ${POSTGRES_USER:-repetitor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-repetitor}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-repetitor} -d ${POSTGRES_DB:-repetitor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_connections=100
+      - -c
+      - work_mem=8MB
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: repetitor-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    profiles: ["ai-local"]
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Repetitor.Api/Dockerfile
+    image: repetitor/api:local
+    container_name: repetitor-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: >-
+        Host=postgres;Port=5432;Database=${POSTGRES_DB:-repetitor};Username=${POSTGRES_USER:-repetitor};Password=${POSTGRES_PASSWORD:-repetitor};Include Error Detail=true;Maximum Pool Size=20
+      Jwt__Issuer: ${JWT_ISSUER:-repetitor-api}
+      Jwt__Audience: ${JWT_AUDIENCE:-repetitor-clients}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__AccessTokenMinutes: ${JWT_ACCESS_MINUTES:-30}
+      Jwt__RefreshTokenDays: ${JWT_REFRESH_DAYS:-30}
+      Database__AutoMigrate: ${AUTO_MIGRATE:-true}
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      Cors__0: ${CORS_ORIGIN:-*}
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-}
+      Ai__DefaultChatProvider: ${AI_DEFAULT_PROVIDER:-ollama}
+      Ai__DefaultEmbeddingProvider: ${AI_DEFAULT_PROVIDER:-ollama}
+      Ai__Providers__openai__Enabled: ${OPENAI_ENABLED:-false}
+      Ai__Providers__openai__ApiKey: ${OPENAI_API_KEY:-}
+      Ai__Providers__ollama__Enabled: ${OLLAMA_ENABLED:-true}
+      Ai__Providers__ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://ollama:11434/}
+      Media__RootPath: /app/media
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - media:/app/media
+
+volumes:
+  pgdata:
+  ollama:
+  media:
