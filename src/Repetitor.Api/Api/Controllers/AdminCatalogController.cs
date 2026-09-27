@@ -358,7 +358,7 @@ public sealed class AdminCatalogController(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var setting = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AiSettingsKey, ct);
         var json = setting?.Value as JsonObject;
-        return json?["lessonPrompt"]?.GetValue<string>();
+        return json?["lessonPrompt"]?.ToString();
     }
 
     private async Task<AiSettingsResponse> BuildAiSettingsResponse(AppDbContext db, CancellationToken ct)
