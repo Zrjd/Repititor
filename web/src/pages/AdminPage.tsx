@@ -412,29 +412,27 @@ function LessonForm({
     <form className="card admin-form" onSubmit={handleSubmit}>
       <h3>{lesson ? t('admin.editLesson') : t('admin.createLesson')}</h3>
 
-      {!lesson ? (
-        <div className="admin-form__ai">
-          <label>
-            {t('admin.generateLessonTitle')}
-            <input
-              value={generateTopic}
-              onChange={(e) => setGenerateTopic(e.target.value)}
-              placeholder={t('admin.generateLessonHint')}
-            />
-          </label>
-          <button
-            type="button"
-            className="button button--accent"
-            disabled={generating || generateMutation.isPending}
-            onClick={() => {
-              setGenerating(true)
-              generateMutation.mutate()
-            }}
-          >
-            {generating || generateMutation.isPending ? t('admin.generating') : t('admin.generateWithAi')}
-          </button>
-        </div>
-      ) : null}
+      <div className="admin-form__ai">
+        <label>
+          {t('admin.generateLessonTitle')}
+          <input
+            value={generateTopic}
+            onChange={(e) => setGenerateTopic(e.target.value)}
+            placeholder={t('admin.generateLessonHint')}
+          />
+        </label>
+        <button
+          type="button"
+          className="button button--accent"
+          disabled={generating || generateMutation.isPending}
+          onClick={() => {
+            setGenerating(true)
+            generateMutation.mutate()
+          }}
+        >
+          {generating || generateMutation.isPending ? t('admin.generating') : t('admin.generateWithAi')}
+        </button>
+      </div>
 
       <label>
         {t('admin.lessonTitle')}
