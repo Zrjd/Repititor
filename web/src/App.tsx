@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import { Layout } from './components/Layout'
 import { Spinner } from './components/Feedback'
 import { I18nProvider } from './i18n'
+import { AdminPage } from './pages/AdminPage'
 import { CatalogPage } from './pages/CatalogPage'
 import { CoursePage, LessonPage } from './pages/CoursePage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -82,6 +83,7 @@ export default function App() {
                 }
               >
                 <Route index element={<DashboardPage />} />
+                <Route path="admin" element={<AdminPage />} />
                 <Route path="courses" element={<CatalogPage />} />
                 <Route path="courses/:slug" element={<CoursePage />} />
                 <Route path="lessons/:lessonId" element={<LessonPage />} />

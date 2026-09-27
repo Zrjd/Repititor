@@ -258,3 +258,77 @@ export interface GoalProgress {
   currentStreak: number
   longestStreak: number
 }
+
+export interface AdminCourse {
+  id: string
+  slug: string
+  title: string
+  description?: string | null
+  level: CefrLevel
+  languageId: string
+  languageCode: string
+  coverUrl?: string | null
+  accentColor?: string | null
+  estimatedMinutes: number
+  isPublished: boolean
+  sortOrder: number
+  lessonsCount: number
+  createdAt: string
+}
+
+export interface AdminLesson {
+  id: string
+  courseId: string
+  slug: string
+  title: string
+  summary?: string | null
+  contentMarkdown?: string | null
+  sortOrder: number
+  estimatedMinutes: number
+  isPublished: boolean
+  grammarTopicId?: string | null
+  keyVocabulary?: string[] | null
+}
+
+export interface AiProviderSettings {
+  name: string
+  kind: string
+  baseUrl: string
+  apiKey?: string | null
+  chatModel: string
+  embeddingModel: string
+  ttsModel?: string | null
+  sttModel?: string | null
+  enabled: boolean
+  timeoutSeconds: number
+  requestsPerMinute: number
+}
+
+export interface AiSettings {
+  defaultChatProvider: string
+  defaultEmbeddingProvider: string
+  defaultChatModel: string
+  temperature: number
+  maxOutputTokens: number
+  providers: AiProviderSettings[]
+}
+
+export interface GenerateLessonContent {
+  title: string
+  summary?: string | null
+  contentMarkdown: string
+  keyVocabulary: string[]
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+}
+
+export interface GenerateCourseContent {
+  description: string
+  lessonTitles: string[]
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+}

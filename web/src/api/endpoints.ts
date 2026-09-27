@@ -1,12 +1,17 @@
 import { api } from './client'
 import type {
   ActivityDay,
+  AdminCourse,
+  AdminLesson,
+  AiSettings,
   AuthResponse,
   CefrLevel,
   Course,
   Dashboard,
   Deck,
   DueCards,
+  GenerateCourseContent,
+  GenerateLessonContent,
   GoalProgress,
   GrammarTopic,
   Language,
@@ -100,6 +105,68 @@ export const statsApi = {
     api.get<Dashboard>('/users/me/dashboard', { query: { activityDays } }),
   goal: () => api.get<GoalProgress>('/users/me/goal'),
   activity: (days = 30) => api.get<ActivityDay[]>('/users/me/stats', { query: { days } }),
+}
+
+export const adminApi = {
+  courses: (languageId?: string, includeUnpublished = true) =>
+    api.get<AdminCourse[]>('/admin/courses', { query: { languageId, includeUnpublished } }),
+  course: (id: string) => api.get<AdminCourse>(`/admin/courses/${id}`),
+  createCourse: (data: {
+    slug: string
+    title: string
+    description?: string
+    level: CefrLevel
+    languageId: string
+    coverUrl?: string
+    accentColor?: string
+    estimatedMinutes: number
+    isPublished: boolean
+    sortOrder: number
+  }) => api.post<AdminCourse>('/admin/courses', data),
+  updateCourse: (id: string, data: Partial<AdminCourse>) => api.put<AdminCourse>(`/admin/courses/${id}`, data),
+  deleteCourse: (id: string) => api.delete<void>(`/admin/courses/${id}`),
+  lessons: (courseId: string) => api.get<AdminLesson[]>(`/admin/courses/${courseId}/lessons`),
+  lesson: (id: string) => api.get<AdminLesson>(`/admin/lessons/${id}`),
+  createLesson: (data: {
+    courseId: string
+    slug: string
+    title: string
+    summary?: string
+    contentMarkdown?: string
+    sortOrder: number
+    estimatedMinutes: number
+    isPublished: boolean
+    grammarTopicId?: string
+    keyVocabulary?: string[]
+  }) => api.post<AdminLesson>('/admin/lessons', data),
+  updateLesson: (id: string, data: Partial<AdminLesson>) => api.put<AdminLesson>(`/admin/lessons/${id}`, data),
+  deleteLesson: (id: string) => api.delete<void>(`/admin/lessons/${id}`),
+  generateLesson: (id: string, data: { topic?: string; level?: CefrLevel; requirements?: string }) =>
+    api.post<GenerateLessonContent>(`/admin/lessons/${id}/generate`, data),
+  generateCourse: (id: string, data: { topic?: string; level?: CefrLevel; lessonsCount: number }) =>
+    api.post<GenerateCourseContent>(`/admin/courses/${id}/generate`, data),
+  aiSettings: () => api.get<AiSettings>('/admin/ai-settings'),
+  updateAiSettings: (data: {
+    defaultChatProvider?: string
+    defaultEmbeddingProvider?: string
+    defaultChatModel?: string
+    temperature?: number
+    maxOutputTokens?: number
+    providers?: Array<{
+      name: string
+      kind?: string
+      baseUrl?: string
+      apiKey?: string
+      chatModel?: string
+      embeddingModel?: string
+      ttsModel?: string
+      sttModel?: string
+      enabled?: boolean
+      timeoutSeconds?: number
+      requestsPerMinute?: number
+    }>
+  }) => api.put<AiSettings>('/admin/ai-settings', data),
+  testAi: (provider?: string) => api.post<{ healthy: boolean; provider: string; latencyMs: number; error?: string }>('/admin/ai-settings/test', { provider }),
 }
 
 export type { ReviewCard }

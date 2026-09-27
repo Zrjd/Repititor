@@ -1,0 +1,4745 @@
+openapi: 3.0.4
+info:
+  title: Repetitor API
+  description: REST API сервиса для изучения иностранных языков (Android / Web). Интервальное
+    повторение, словарь с семантическим поиском (pgvector), генерация упражнений,
+    чат-репетитор, TTS/STT и оценка произношения.
+  contact:
+    name: Repetitor
+  version: v1
+paths:
+  /api/v1/admin/stats:
+    get:
+      tags:
+      - Admin
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+  /api/v1/admin/users:
+    get:
+      tags:
+      - Admin
+      parameters:
+      - name: Page
+        in: query
+        schema:
+          maximum: 2147483647
+          minimum: 1
+          type: integer
+          format: int32
+      - name: PageSize
+        in: query
+        schema:
+          maximum: 200
+          minimum: 1
+          type: integer
+          format: int32
+      - name: query
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ObjectPagedResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectPagedResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ObjectPagedResponse'
+  /api/v1/admin/users/{id}/role:
+    patch:
+      tags:
+      - Admin
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: role
+        in: query
+        schema:
+          $ref: '#/components/schemas/UserRole'
+      responses:
+        '204':
+          description: No Content
+  /api/v1/admin/users/{id}/active:
+    patch:
+      tags:
+      - Admin
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: active
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '204':
+          description: No Content
+  /api/v1/admin/ai-logs:
+    delete:
+      tags:
+      - Admin
+      parameters:
+      - name: olderThanDays
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        '204':
+          description: No Content
+  /api/v1/ai/providers:
+    get:
+      tags:
+      - Ai
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiProviderResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiProviderResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiProviderResponse'
+  /api/v1/ai/providers/{name}/health:
+    post:
+      tags:
+      - Ai
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+  /api/v1/ai/usage:
+    get:
+      tags:
+      - Ai
+      parameters:
+      - name: days
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      - name: allUsers
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AiUsageResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiUsageResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AiUsageResponse'
+  /api/v1/ai/dictionary/reindex:
+    post:
+      tags:
+      - Ai
+      parameters:
+      - name: provider
+        in: query
+        schema:
+          type: string
+      - name: batchSize
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 64
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 1000
+      - name: force
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ReindexResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ReindexResponse'
+  /api/v1/ai/limits:
+    get:
+      tags:
+      - Ai
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+  /api/v1/auth/register:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/auth/refresh:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: No Content
+  /api/v1/auth/logout-all:
+    post:
+      tags:
+      - Auth
+      responses:
+        '204':
+          description: No Content
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+  /api/v1/auth/change-password:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/auth/forgot-password:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: Accepted
+  /api/v1/auth/reset-password:
+    post:
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/catalog/languages:
+    get:
+      tags:
+      - Catalog
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LanguageResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LanguageResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LanguageResponse'
+  /api/v1/catalog/languages/{code}:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LanguageResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LanguageResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LanguageResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/catalog/courses:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: languageId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: level
+        in: query
+        schema:
+          $ref: '#/components/schemas/CefrLevel'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourseResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourseResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourseResponse'
+  /api/v1/catalog/courses/{slug}:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/CourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/CourseResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/catalog/courses/{slug}/lessons:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LessonResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LessonResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LessonResponse'
+  /api/v1/catalog/lessons/{lessonId}:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: lessonId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LessonResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/catalog/grammar:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: languageId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: maxLevel
+        in: query
+        schema:
+          $ref: '#/components/schemas/CefrLevel'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GrammarTopicResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GrammarTopicResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GrammarTopicResponse'
+  /api/v1/catalog/grammar/{id}:
+    get:
+      tags:
+      - Catalog
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/GrammarTopicResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrammarTopicResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/GrammarTopicResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/decks:
+    get:
+      tags:
+      - Decks
+      parameters:
+      - name: includeArchived
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeckResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeckResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeckResponse'
+    post:
+      tags:
+      - Decks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeckRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeckRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateDeckRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+  /api/v1/decks/{id}:
+    get:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeckRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeckRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeckRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/DeckResponse'
+    delete:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/decks/{id}/cards:
+    get:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Page
+        in: query
+        schema:
+          maximum: 2147483647
+          minimum: 1
+          type: integer
+          format: int32
+      - name: PageSize
+        in: query
+        schema:
+          maximum: 200
+          minimum: 1
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWordResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWordResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWordResponse'
+    post:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckCardsRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/DeckCardsRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/DeckCardsRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+  /api/v1/decks/{id}/cards/{lexicalUnitId}:
+    delete:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: lexicalUnitId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/decks/{id}/reset-progress:
+    post:
+      tags:
+      - Decks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/dictionary/words:
+    get:
+      tags:
+      - Dictionary
+      parameters:
+      - name: Query
+        in: query
+        schema:
+          maxLength: 400
+          minLength: 0
+          type: string
+      - name: LanguageId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: TranslationLanguageId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: Limit
+        in: query
+        schema:
+          maximum: 200
+          minimum: 1
+          type: integer
+          format: int32
+      - name: Page
+        in: query
+        schema:
+          maximum: 200
+          minimum: 0
+          type: integer
+          format: int32
+      - name: Semantic
+        in: query
+        schema:
+          type: boolean
+      - name: MaxMinLevel
+        in: query
+        schema:
+          $ref: '#/components/schemas/CefrLevel'
+      - name: Tags
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+      - name: PartOfSpeech
+        in: query
+        schema:
+          $ref: '#/components/schemas/PartOfSpeech'
+      - name: Provider
+        in: query
+        schema:
+          type: string
+      - name: MinSimilarity
+        in: query
+        schema:
+          maximum: 1
+          minimum: 0
+          type: number
+          format: double
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponsePagedResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponsePagedResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponsePagedResponse'
+    post:
+      tags:
+      - Dictionary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLexicalUnitRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateLexicalUnitRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateLexicalUnitRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+  /api/v1/dictionary/words/{id}:
+    get:
+      tags:
+      - Dictionary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+      - Dictionary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLexicalUnitRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLexicalUnitRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateLexicalUnitRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LexicalUnitResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - Dictionary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/dictionary/words/similar/{id}:
+    get:
+      tags:
+      - Dictionary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      - name: provider
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LexicalUnitResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LexicalUnitResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LexicalUnitResponse'
+  /api/v1/dictionary/words/import:
+    post:
+      tags:
+      - Dictionary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportWordsRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/ImportWordsRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/ImportWordsRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ImportWordsResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportWordsResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ImportWordsResponse'
+  /api/v1/dictionary/my-words:
+    get:
+      tags:
+      - Dictionary
+      parameters:
+      - name: Page
+        in: query
+        schema:
+          maximum: 2147483647
+          minimum: 1
+          type: integer
+          format: int32
+      - name: PageSize
+        in: query
+        schema:
+          maximum: 200
+          minimum: 1
+          type: integer
+          format: int32
+      - name: state
+        in: query
+        schema:
+          $ref: '#/components/schemas/CardState'
+      - name: deckId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/UserWordResponsePagedResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWordResponsePagedResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/UserWordResponsePagedResponse'
+  /api/v1/dictionary/my-words/{lexicalUnitId}:
+    post:
+      tags:
+      - Dictionary
+      parameters:
+      - name: lexicalUnitId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: deckId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: note
+        in: query
+        schema:
+          type: string
+      - name: source
+        in: query
+        schema:
+          $ref: '#/components/schemas/ContentSource'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/UserWordResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWordResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/UserWordResponse'
+    delete:
+      tags:
+      - Dictionary
+      parameters:
+      - name: lexicalUnitId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/dictionary/word-of-the-day:
+    get:
+      tags:
+      - Dictionary
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/WordOfTheDayResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordOfTheDayResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/WordOfTheDayResponse'
+  /api/v1/dictionary/audio/word/{lexicalUnitId}:
+    post:
+      tags:
+      - Dictionary
+      parameters:
+      - name: lexicalUnitId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: voice
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+  /api/v1/exercises:
+    get:
+      tags:
+      - Exercises
+      parameters:
+      - name: Page
+        in: query
+        schema:
+          maximum: 2147483647
+          minimum: 1
+          type: integer
+          format: int32
+      - name: PageSize
+        in: query
+        schema:
+          maximum: 200
+          minimum: 1
+          type: integer
+          format: int32
+      - name: type
+        in: query
+        schema:
+          $ref: '#/components/schemas/ExerciseType'
+      - name: courseId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: lessonId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: mine
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: publishedOnly
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ExerciseSummaryResponsePagedResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseSummaryResponsePagedResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseSummaryResponsePagedResponse'
+  /api/v1/exercises/{id}:
+    get:
+      tags:
+      - Exercises
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: includeAnswers
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+      - Exercises
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExerciseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExerciseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateExerciseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+    delete:
+      tags:
+      - Exercises
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/exercises/generate:
+    post:
+      tags:
+      - Exercises
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateExerciseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/GenerateExerciseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/GenerateExerciseRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/exercises/{id}/attempts:
+    post:
+      tags:
+      - Exercises
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitExerciseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/SubmitExerciseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/SubmitExerciseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ExerciseAttemptResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseAttemptResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseAttemptResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    get:
+      tags:
+      - Exercises
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseAttemptResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseAttemptResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseAttemptResponse'
+  /api/v1/exercises/history:
+    get:
+      tags:
+      - Exercises
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseAttemptResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseAttemptResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseAttemptResponse'
+  /api/v1/exercises/recommended:
+    get:
+      tags:
+      - Exercises
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 5
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseSummaryResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseSummaryResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseSummaryResponse'
+  /api/v1/practice/due:
+    get:
+      tags:
+      - Practice
+      parameters:
+      - name: deckId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/PracticeSessionResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSessionResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSessionResponse'
+  /api/v1/practice/due/count:
+    get:
+      tags:
+      - Practice
+      parameters:
+      - name: deckId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+  /api/v1/practice/forecast:
+    get:
+      tags:
+      - Practice
+      parameters:
+      - name: deckId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/PracticeSummaryResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSummaryResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSummaryResponse'
+  /api/v1/practice/reviews:
+    post:
+      tags:
+      - Practice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewResultResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewResultResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewResultResponse'
+  /api/v1/practice/summary:
+    post:
+      tags:
+      - Practice
+      parameters:
+      - name: deckId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: reviewed
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: correct
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: again
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: newSeen
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: xp
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/PracticeSummaryResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSummaryResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSummaryResponse'
+  /api/v1/practice/suspend/{reviewCardId}:
+    post:
+      tags:
+      - Practice
+      parameters:
+      - name: reviewCardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: suspended
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '204':
+          description: No Content
+  /api/v1/practice/prefetch-embeddings:
+    post:
+      tags:
+      - Practice
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+  /api/v1/speech/synthesize:
+    post:
+      tags:
+      - Speech
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SynthesizeRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/SynthesizeRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/SynthesizeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/SynthesizeResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SynthesizeResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/SynthesizeResponse'
+        '503':
+          description: Service Unavailable
+  /api/v1/speech/transcribe:
+    post:
+      tags:
+      - Speech
+      parameters:
+      - name: Language
+        in: query
+        schema:
+          maxLength: 8
+          minLength: 2
+          type: string
+      - name: Prompt
+        in: query
+        schema:
+          maxLength: 2000
+          minLength: 0
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - Audio
+              type: object
+              properties:
+                Audio:
+                  type: string
+                  format: binary
+            encoding:
+              Audio:
+                style: form
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/TranscriptionResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptionResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptionResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '413':
+          description: Content Too Large
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/speech/pronunciation:
+    post:
+      tags:
+      - Speech
+      parameters:
+      - name: TargetText
+        in: query
+        required: true
+        schema:
+          maxLength: 2000
+          minLength: 1
+          type: string
+      - name: Transcript
+        in: query
+        schema:
+          maxLength: 4000
+          minLength: 0
+          type: string
+      - name: Language
+        in: query
+        schema:
+          maxLength: 8
+          minLength: 2
+          type: string
+      - name: LexicalUnitId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: Provider
+        in: query
+        schema:
+          maxLength: 64
+          minLength: 0
+          type: string
+      - name: UseAi
+        in: query
+        schema:
+          type: boolean
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - Audio
+              type: object
+              properties:
+                Audio:
+                  type: string
+                  format: binary
+            encoding:
+              Audio:
+                style: form
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/PronunciationResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PronunciationResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/PronunciationResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/speech/pronunciation/attempts:
+    get:
+      tags:
+      - Speech
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PronunciationResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PronunciationResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PronunciationResponse'
+  /api/v1/speech/recordings:
+    get:
+      tags:
+      - Speech
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items: {}
+            application/json:
+              schema:
+                type: array
+                items: {}
+            text/json:
+              schema:
+                type: array
+                items: {}
+  /api/v1/speech/recordings/{id}:
+    delete:
+      tags:
+      - Speech
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/tutor/sessions:
+    get:
+      tags:
+      - Tutor
+      parameters:
+      - name: includeArchived
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatSessionResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatSessionResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatSessionResponse'
+    post:
+      tags:
+      - Tutor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartChatSessionRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/StartChatSessionRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/StartChatSessionRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+  /api/v1/tutor/sessions/{sessionId}:
+    get:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameSessionRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RenameSessionRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RenameSessionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+    delete:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/tutor/sessions/{sessionId}/messages:
+    get:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: before
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessageResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessageResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessageResponse'
+    post:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/SendChatMessageResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendChatMessageResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/SendChatMessageResponse'
+  /api/v1/tutor/sessions/{sessionId}/messages/stream:
+    post:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+      responses:
+        '200':
+          description: OK
+  /api/v1/tutor/sessions/{sessionId}/messages/{messageId}/regenerate:
+    post:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ChatMessageResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageResponse'
+  /api/v1/tutor/sessions/{sessionId}/archive:
+    post:
+      tags:
+      - Tutor
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: archived
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '204':
+          description: No Content
+  /api/v1/tutor/messages/{messageId}/feedback:
+    post:
+      tags:
+      - Tutor
+      parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '204':
+          description: No Content
+  /api/v1/tutor/usage:
+    get:
+      tags:
+      - Tutor
+      parameters:
+      - name: days
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AiUsageResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiUsageResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AiUsageResponse'
+  /api/v1/users/me:
+    get:
+      tags:
+      - Users
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    patch:
+      tags:
+      - Users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+  /api/v1/users/me/dashboard:
+    get:
+      tags:
+      - Users
+      parameters:
+      - name: activityDays
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 14
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+  /api/v1/users/me/stats:
+    get:
+      tags:
+      - Users
+      parameters:
+      - name: days
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityResponse'
+  /api/v1/users/me/goal:
+    get:
+      tags:
+      - Users
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema: {}
+            application/json:
+              schema: {}
+            text/json:
+              schema: {}
+components:
+  schemas:
+    ActivityResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        xpEarned:
+          type: integer
+          format: int32
+        reviewsCompleted:
+          type: integer
+          format: int32
+        correctAnswers:
+          type: integer
+          format: int32
+        newWordsLearned:
+          type: integer
+          format: int32
+        exercisesCompleted:
+          type: integer
+          format: int32
+        minutesStudied:
+          type: integer
+          format: int32
+      additionalProperties: false
+    AiProviderResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        kind:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        configured:
+          type: boolean
+        chatModel:
+          type: string
+          nullable: true
+        embeddingModel:
+          type: string
+          nullable: true
+        ttsModel:
+          type: string
+          nullable: true
+        sttModel:
+          type: string
+          nullable: true
+        supportsStreaming:
+          type: boolean
+        supportsJsonMode:
+          type: boolean
+        embeddingDimensions:
+          type: integer
+          format: int32
+        requestsPerMinute:
+          type: integer
+          format: int32
+      additionalProperties: false
+    AiUsageByDayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        calls:
+          type: integer
+          format: int32
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+      additionalProperties: false
+    AiUsageByProviderResponse:
+      type: object
+      properties:
+        provider:
+          type: string
+          nullable: true
+        calls:
+          type: integer
+          format: int32
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+        estimatedCostUsd:
+          type: number
+          format: double
+      additionalProperties: false
+    AiUsageResponse:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        totalCalls:
+          type: integer
+          format: int32
+        failedCalls:
+          type: integer
+          format: int32
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+        estimatedCostUsd:
+          type: number
+          format: double
+        byProvider:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiUsageByProviderResponse'
+          nullable: true
+        byDay:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiUsageByDayResponse'
+          nullable: true
+      additionalProperties: false
+    CardState:
+      enum:
+      - New
+      - Learning
+      - Review
+      - Relearning
+      - Mastered
+      type: string
+    CefrLevel:
+      enum:
+      - A1
+      - A2
+      - B1
+      - B2
+      - C1
+      - C2
+      type: string
+    ChangePasswordRequest:
+      required:
+      - currentPassword
+      - newPassword
+      type: object
+      properties:
+        currentPassword:
+          minLength: 1
+          type: string
+        newPassword:
+          maxLength: 128
+          minLength: 8
+          type: string
+      additionalProperties: false
+    ChatMessageResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          nullable: true
+        content:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+        latencyMs:
+          type: integer
+          format: int32
+        ragContextRefs:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        feedbackRating:
+          type: integer
+          format: int32
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ChatSessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+        mode:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        scenario:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        useDictionaryContext:
+          type: boolean
+        isArchived:
+          type: boolean
+        messageCount:
+          type: integer
+          format: int32
+        totalInputTokens:
+          type: integer
+          format: int32
+        totalOutputTokens:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        lastMessageAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ContentSource:
+      enum:
+      - Curated
+      - AiGenerated
+      - UserCreated
+      - Imported
+      type: string
+    ContentStatus:
+      enum:
+      - Draft
+      - Verified
+      - Deprecated
+      type: string
+    CourseResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        languageId:
+          type: string
+          format: uuid
+        languageCode:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        accentColor:
+          type: string
+          nullable: true
+        estimatedMinutes:
+          type: integer
+          format: int32
+        lessonsCount:
+          type: integer
+          format: int32
+        progressPercent:
+          type: integer
+          format: int32
+          nullable: true
+        isEnrolled:
+          type: boolean
+      additionalProperties: false
+    CreateDeckRequest:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          maxLength: 160
+          minLength: 1
+          type: string
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        languageCode:
+          maxLength: 8
+          minLength: 0
+          type: string
+          nullable: true
+        coverEmoji:
+          maxLength: 16
+          minLength: 0
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        lexicalUnitIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+      additionalProperties: false
+    CreateLexicalUnitRequest:
+      required:
+      - text
+      type: object
+      properties:
+        text:
+          maxLength: 400
+          minLength: 1
+          type: string
+        transcription:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        translation:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        alternativeTranslations:
+          type: array
+          items:
+            type: string
+          nullable: true
+        partOfSpeech:
+          $ref: '#/components/schemas/PartOfSpeech'
+        gender:
+          maxLength: 16
+          minLength: 0
+          type: string
+          nullable: true
+        pluralForm:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        pastTense:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        audioUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        exampleTarget:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        exampleNative:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        notes:
+          maxLength: 4000
+          minLength: 0
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        minLearnerLevel:
+          $ref: '#/components/schemas/CefrLevel'
+        frequencyRank:
+          maximum: 100000
+          minimum: 0
+          type: integer
+          format: int32
+        languageId:
+          type: string
+          format: uuid
+          nullable: true
+        translationLanguageId:
+          type: string
+          format: uuid
+          nullable: true
+        deckId:
+          type: string
+          format: uuid
+          nullable: true
+        computeEmbedding:
+          type: boolean
+      additionalProperties: false
+    DashboardResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        cardsDue:
+          type: integer
+          format: int32
+        newCards:
+          type: integer
+          format: int32
+        totalWords:
+          type: integer
+          format: int32
+        masteredWords:
+          type: integer
+          format: int32
+        exercisesDone7d:
+          type: integer
+          format: int32
+        reviewsToday:
+          type: integer
+          format: int32
+        xpToday:
+          type: integer
+          format: int32
+        dailyGoalXp:
+          type: integer
+          format: int32
+        currentStreak:
+          type: integer
+          format: int32
+        streakLast14:
+          type: array
+          items:
+            type: integer
+            format: int32
+          nullable: true
+        recommendedWords:
+          type: array
+          items:
+            $ref: '#/components/schemas/DueWordResponse'
+          nullable: true
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityResponse'
+          nullable: true
+      additionalProperties: false
+    DeckCardsRequest:
+      type: object
+      properties:
+        lexicalUnitIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+      additionalProperties: false
+    DeckResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        languageCode:
+          type: string
+          nullable: true
+        coverEmoji:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        isArchived:
+          type: boolean
+        cardsCount:
+          type: integer
+          format: int32
+        dueCount:
+          type: integer
+          format: int32
+        newCount:
+          type: integer
+          format: int32
+        masteredCount:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    DueCardResponse:
+      type: object
+      properties:
+        reviewCardId:
+          type: string
+          format: uuid
+        lexicalUnitId:
+          type: string
+          format: uuid
+        text:
+          type: string
+          nullable: true
+        translation:
+          type: string
+          nullable: true
+        transcription:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+        partOfSpeech:
+          type: string
+          nullable: true
+        exampleTarget:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        dueAt:
+          type: string
+          format: date-time
+        intervalDays:
+          type: number
+          format: double
+        repetitions:
+          type: integer
+          format: int32
+      additionalProperties: false
+    DueWordResponse:
+      type: object
+      properties:
+        lexicalUnitId:
+          type: string
+          format: uuid
+        text:
+          type: string
+          nullable: true
+        translation:
+          type: string
+          nullable: true
+        transcription:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        dueInSeconds:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ExerciseAttemptResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+        scorePercent:
+          type: integer
+          format: int32
+        isPassed:
+          type: boolean
+        correctCount:
+          type: integer
+          format: int32
+        totalCount:
+          type: integer
+          format: int32
+        xpEarned:
+          type: integer
+          format: int32
+        feedback:
+          type: string
+          nullable: true
+        items:
+          $ref: '#/components/schemas/JsonNode'
+        durationMs:
+          type: integer
+          format: int32
+        completedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ExerciseResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        instructions:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        payload:
+          $ref: '#/components/schemas/JsonNode'
+        explanationMarkdown:
+          type: string
+          nullable: true
+        topics:
+          type: array
+          items:
+            type: string
+          nullable: true
+        points:
+          type: integer
+          format: int32
+        estimatedSeconds:
+          type: integer
+          format: int32
+        source:
+          type: string
+          nullable: true
+        aiProvider:
+          type: string
+          nullable: true
+        aiModel:
+          type: string
+          nullable: true
+        courseId:
+          type: string
+          format: uuid
+          nullable: true
+        lessonId:
+          type: string
+          format: uuid
+          nullable: true
+        languageId:
+          type: string
+          format: uuid
+        isPublished:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        lastScorePercent:
+          type: integer
+          format: int32
+          nullable: true
+        attempts:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ExerciseSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        instructions:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        itemCount:
+          type: integer
+          format: int32
+        points:
+          type: integer
+          format: int32
+        estimatedSeconds:
+          type: integer
+          format: int32
+        source:
+          type: string
+          nullable: true
+        aiProvider:
+          type: string
+          nullable: true
+        aiModel:
+          type: string
+          nullable: true
+        courseId:
+          type: string
+          format: uuid
+          nullable: true
+        lessonId:
+          type: string
+          format: uuid
+          nullable: true
+        isPublished:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        lastScorePercent:
+          type: integer
+          format: int32
+          nullable: true
+        attempts:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ExerciseSummaryResponsePagedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseSummaryResponse'
+          nullable: true
+        page:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+        totalPages:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ExerciseType:
+      enum:
+      - MultipleChoice
+      - TranslateToTarget
+      - TranslateFromTarget
+      - GapFill
+      - WordOrder
+      - MatchPairs
+      - Listening
+      - Writing
+      - Speaking
+      - FillInTheBlanks
+      type: string
+    FeedbackRequest:
+      type: object
+      properties:
+        rating:
+          maximum: 1
+          minimum: -1
+          type: integer
+          format: int32
+      additionalProperties: false
+    ForecastDayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        cards:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ForgotPasswordRequest:
+      required:
+      - email
+      type: object
+      properties:
+        email:
+          minLength: 1
+          type: string
+          format: email
+      additionalProperties: false
+    GenerateExerciseRequest:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ExerciseType'
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        itemCount:
+          maximum: 20
+          minimum: 1
+          type: integer
+          format: int32
+        topic:
+          maxLength: 300
+          minLength: 0
+          type: string
+          nullable: true
+        provider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        model:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        courseId:
+          type: string
+          format: uuid
+          nullable: true
+        lessonId:
+          type: string
+          format: uuid
+          nullable: true
+        lexicalUnitIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        useVectorContext:
+          type: boolean
+      additionalProperties: false
+    GrammarTopicResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        minLevel:
+          type: string
+          nullable: true
+        explanationMarkdown:
+          type: string
+          nullable: true
+      additionalProperties: false
+    ImportWordsRequest:
+      required:
+      - text
+      type: object
+      properties:
+        text:
+          maxLength: 200000
+          minLength: 2
+          type: string
+        delimiter:
+          maxLength: 1
+          minLength: 0
+          type: string
+          nullable: true
+        hasHeader:
+          type: boolean
+        languageId:
+          type: string
+          format: uuid
+          nullable: true
+        translationLanguageId:
+          type: string
+          format: uuid
+          nullable: true
+        deckId:
+          type: string
+          format: uuid
+          nullable: true
+        minLearnerLevel:
+          $ref: '#/components/schemas/CefrLevel'
+        defaultTags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        skipDuplicates:
+          type: boolean
+        computeEmbeddings:
+          type: boolean
+      additionalProperties: false
+    ImportWordsResponse:
+      type: object
+      properties:
+        imported:
+          type: integer
+          format: int32
+        updated:
+          type: integer
+          format: int32
+        skipped:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        errors:
+          type: array
+          items:
+            type: string
+          nullable: true
+      additionalProperties: false
+    JsonNode:
+      type: object
+      properties:
+        options:
+          $ref: '#/components/schemas/JsonNodeOptions'
+        parent:
+          $ref: '#/components/schemas/JsonNode'
+        root:
+          $ref: '#/components/schemas/JsonNode'
+      additionalProperties: false
+    JsonNodeOptions:
+      type: object
+      properties:
+        propertyNameCaseInsensitive:
+          type: boolean
+      additionalProperties: false
+    LanguageResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+        nameEnglish:
+          type: string
+          nullable: true
+        nameRussian:
+          type: string
+          nullable: true
+        nativeName:
+          type: string
+          nullable: true
+        flagEmoji:
+          type: string
+          nullable: true
+        isEnabled:
+          type: boolean
+      additionalProperties: false
+    LessonResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        courseId:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+          format: int32
+        estimatedMinutes:
+          type: integer
+          format: int32
+        keyVocabulary:
+          type: array
+          items:
+            type: string
+          nullable: true
+        contentMarkdown:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        progressPercent:
+          type: integer
+          format: int32
+        bestScorePercent:
+          type: integer
+          format: int32
+      additionalProperties: false
+    LexicalUnitResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        languageId:
+          type: string
+          format: uuid
+        translationLanguageId:
+          type: string
+          format: uuid
+        text:
+          type: string
+          nullable: true
+        transcription:
+          type: string
+          nullable: true
+        translation:
+          type: string
+          nullable: true
+        alternativeTranslations:
+          type: array
+          items:
+            type: string
+          nullable: true
+        partOfSpeech:
+          type: string
+          nullable: true
+        gender:
+          type: string
+          nullable: true
+        pluralForm:
+          type: string
+          nullable: true
+        pastTense:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+        exampleTarget:
+          type: string
+          nullable: true
+        exampleNative:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        minLearnerLevel:
+          type: string
+          nullable: true
+        frequencyRank:
+          type: integer
+          format: int32
+        status:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        semanticSimilarity:
+          type: number
+          format: double
+          nullable: true
+      additionalProperties: false
+    LexicalUnitResponsePagedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LexicalUnitResponse'
+          nullable: true
+        page:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+        totalPages:
+          type: integer
+          format: int32
+      additionalProperties: false
+    LoginRequest:
+      required:
+      - email
+      - password
+      type: object
+      properties:
+        email:
+          minLength: 1
+          type: string
+          format: email
+        password:
+          minLength: 1
+          type: string
+      additionalProperties: false
+    ObjectPagedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {}
+          nullable: true
+        page:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+        totalPages:
+          type: integer
+          format: int32
+      additionalProperties: false
+    PartOfSpeech:
+      enum:
+      - Unknown
+      - Noun
+      - Verb
+      - Adjective
+      - Adverb
+      - Pronoun
+      - Preposition
+      - Conjunction
+      - Interjection
+      - Numeral
+      - Article
+      - Phrase
+      - Expression
+      type: string
+    PracticeSessionResponse:
+      type: object
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/DueCardResponse'
+          nullable: true
+        totalDue:
+          type: integer
+          format: int32
+        limit:
+          type: integer
+          format: int32
+      additionalProperties: false
+    PracticeSummaryResponse:
+      type: object
+      properties:
+        reviewed:
+          type: integer
+          format: int32
+        correct:
+          type: integer
+          format: int32
+        again:
+          type: integer
+          format: int32
+        newCardsSeen:
+          type: integer
+          format: int32
+        xpEarned:
+          type: integer
+          format: int32
+        accuracyPercent:
+          type: integer
+          format: int32
+        remainingDue:
+          type: integer
+          format: int32
+        forecast:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastDayResponse'
+          nullable: true
+      additionalProperties: false
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        status:
+          type: integer
+          format: int32
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+        instance:
+          type: string
+          nullable: true
+      additionalProperties: {}
+    PronunciationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        targetText:
+          type: string
+          nullable: true
+        recognizedText:
+          type: string
+          nullable: true
+        overallScore:
+          type: integer
+          format: int32
+        accuracyScore:
+          type: integer
+          format: int32
+        fluencyScore:
+          type: integer
+          format: int32
+        completenessScore:
+          type: integer
+          format: int32
+        prosodyScore:
+          type: integer
+          format: int32
+        feedback:
+          type: string
+          nullable: true
+        words:
+          type: array
+          items:
+            $ref: '#/components/schemas/WordScoreResponse'
+          nullable: true
+        method:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+        xpEarned:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    RagContextResponse:
+      type: object
+      properties:
+        lexicalUnitId:
+          type: string
+          format: uuid
+        text:
+          type: string
+          nullable: true
+        translation:
+          type: string
+          nullable: true
+        transcription:
+          type: string
+          nullable: true
+        similarity:
+          type: number
+          format: double
+      additionalProperties: false
+    RefreshRequest:
+      required:
+      - refreshToken
+      type: object
+      properties:
+        refreshToken:
+          minLength: 1
+          type: string
+      additionalProperties: false
+    RegisterRequest:
+      required:
+      - displayName
+      - email
+      - password
+      type: object
+      properties:
+        email:
+          maxLength: 320
+          minLength: 0
+          type: string
+          format: email
+        displayName:
+          maxLength: 120
+          minLength: 2
+          type: string
+        password:
+          maxLength: 128
+          minLength: 8
+          type: string
+        targetLanguageId:
+          type: string
+          format: uuid
+        interfaceLanguageId:
+          type: string
+          format: uuid
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        dailyGoalXp:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ReindexResponse:
+      type: object
+      properties:
+        processed:
+          type: integer
+          format: int32
+        created:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+      additionalProperties: false
+    RenameSessionRequest:
+      required:
+      - title
+      type: object
+      properties:
+        title:
+          maxLength: 200
+          minLength: 1
+          type: string
+      additionalProperties: false
+    ResetPasswordRequest:
+      required:
+      - newPassword
+      - token
+      type: object
+      properties:
+        token:
+          minLength: 1
+          type: string
+        newPassword:
+          maxLength: 128
+          minLength: 8
+          type: string
+      additionalProperties: false
+    ReviewRating:
+      enum:
+      - Again
+      - Hard
+      - Good
+      - Easy
+      type: string
+    ReviewResultResponse:
+      type: object
+      properties:
+        reviewCardId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          nullable: true
+        dueAt:
+          type: string
+          format: date-time
+        intervalDays:
+          type: number
+          format: double
+        easeFactor:
+          type: number
+          format: double
+        wasCorrect:
+          type: boolean
+        masteryScore:
+          type: integer
+          format: int32
+        correctTranslation:
+          type: string
+          nullable: true
+        xpEarned:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ReviewSubmissionItem:
+      required:
+      - rating
+      - reviewCardId
+      type: object
+      properties:
+        reviewCardId:
+          type: string
+          format: uuid
+        rating:
+          $ref: '#/components/schemas/ReviewRating'
+        durationMs:
+          maximum: 600000
+          minimum: 0
+          type: integer
+          format: int32
+        givenAnswer:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+      additionalProperties: false
+    ReviewSubmissionRequest:
+      required:
+      - reviews
+      type: object
+      properties:
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewSubmissionItem'
+        sessionNewCards:
+          type: integer
+          format: int32
+      additionalProperties: false
+    SendChatMessageRequest:
+      required:
+      - message
+      type: object
+      properties:
+        message:
+          maxLength: 8000
+          minLength: 1
+          type: string
+        provider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        model:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        useDictionary:
+          type: boolean
+          nullable: true
+        sourceLanguageCode:
+          maxLength: 8
+          minLength: 0
+          type: string
+          nullable: true
+        audioUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+      additionalProperties: false
+    SendChatMessageResponse:
+      type: object
+      properties:
+        userMessage:
+          $ref: '#/components/schemas/ChatMessageResponse'
+        assistantMessage:
+          $ref: '#/components/schemas/ChatMessageResponse'
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+        latencyMs:
+          type: integer
+          format: int32
+        context:
+          type: array
+          items:
+            $ref: '#/components/schemas/RagContextResponse'
+          nullable: true
+      additionalProperties: false
+    StartChatSessionRequest:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/TutorMode'
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        scenario:
+          maxLength: 2000
+          minLength: 0
+          type: string
+          nullable: true
+        title:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        provider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        model:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        useDictionary:
+          type: boolean
+      additionalProperties: false
+    SubmitExerciseRequest:
+      type: object
+      properties:
+        answers:
+          $ref: '#/components/schemas/JsonNode'
+        durationMs:
+          maximum: 86400000
+          minimum: 0
+          type: integer
+          format: int32
+        freeTextAnswer:
+          maxLength: 8000
+          minLength: 0
+          type: string
+          nullable: true
+        useAiGrading:
+          type: boolean
+      additionalProperties: false
+    SynthesizeRequest:
+      required:
+      - text
+      type: object
+      properties:
+        text:
+          maxLength: 4000
+          minLength: 1
+          type: string
+        language:
+          maxLength: 8
+          minLength: 2
+          type: string
+          nullable: true
+        voice:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        speed:
+          maximum: 2
+          minimum: 0.5
+          type: number
+          format: double
+      additionalProperties: false
+    SynthesizeResponse:
+      type: object
+      properties:
+        audioUrl:
+          type: string
+          nullable: true
+        mediaId:
+          type: string
+          format: uuid
+        contentType:
+          type: string
+          nullable: true
+        sizeBytes:
+          type: integer
+          format: int64
+        provider:
+          type: string
+          nullable: true
+      additionalProperties: false
+    TokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          nullable: true
+        refreshToken:
+          type: string
+          nullable: true
+        tokenType:
+          type: string
+          nullable: true
+        expiresInSeconds:
+          type: integer
+          format: int32
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      additionalProperties: false
+    TranscriptSegmentResponse:
+      type: object
+      properties:
+        start:
+          type: number
+          format: double
+        end:
+          type: number
+          format: double
+        text:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+          format: double
+          nullable: true
+      additionalProperties: false
+    TranscriptionResponse:
+      type: object
+      properties:
+        text:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        durationSeconds:
+          type: number
+          format: double
+          nullable: true
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranscriptSegmentResponse'
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+      additionalProperties: false
+    TutorMode:
+      enum:
+      - FreePractice
+      - LessonRoleplay
+      - ExamPreparation
+      - GrammarHelp
+      - Interview
+      - Travel
+      type: string
+    UpdateDeckRequest:
+      type: object
+      properties:
+        name:
+          maxLength: 160
+          minLength: 1
+          type: string
+          nullable: true
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        languageCode:
+          maxLength: 8
+          minLength: 0
+          type: string
+          nullable: true
+        coverEmoji:
+          maxLength: 16
+          minLength: 0
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        isArchived:
+          type: boolean
+          nullable: true
+      additionalProperties: false
+    UpdateExerciseRequest:
+      type: object
+      properties:
+        title:
+          maxLength: 300
+          minLength: 0
+          type: string
+          nullable: true
+        instructions:
+          maxLength: 2000
+          minLength: 0
+          type: string
+          nullable: true
+        prompt:
+          maxLength: 2000
+          minLength: 0
+          type: string
+          nullable: true
+        payload:
+          $ref: '#/components/schemas/JsonNode'
+        explanationMarkdown:
+          maxLength: 8000
+          minLength: 0
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        points:
+          maximum: 1000
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+        estimatedSeconds:
+          maximum: 3600
+          minimum: 5
+          type: integer
+          format: int32
+          nullable: true
+        isPublished:
+          type: boolean
+          nullable: true
+        isActive:
+          type: boolean
+          nullable: true
+      additionalProperties: false
+    UpdateLexicalUnitRequest:
+      type: object
+      properties:
+        text:
+          maxLength: 400
+          minLength: 1
+          type: string
+          nullable: true
+        transcription:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        translation:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        alternativeTranslations:
+          type: array
+          items:
+            type: string
+          nullable: true
+        partOfSpeech:
+          $ref: '#/components/schemas/PartOfSpeech'
+        gender:
+          maxLength: 16
+          minLength: 0
+          type: string
+          nullable: true
+        pluralForm:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        pastTense:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        audioUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        exampleTarget:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        exampleNative:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        notes:
+          maxLength: 4000
+          minLength: 0
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        minLearnerLevel:
+          $ref: '#/components/schemas/CefrLevel'
+        frequencyRank:
+          maximum: 100000
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ContentStatus'
+        computeEmbedding:
+          type: boolean
+          nullable: true
+      additionalProperties: false
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName:
+          maxLength: 120
+          minLength: 0
+          type: string
+          nullable: true
+        avatarUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        targetLanguageId:
+          type: string
+          format: uuid
+          nullable: true
+        interfaceLanguageId:
+          type: string
+          format: uuid
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        targetLevel:
+          $ref: '#/components/schemas/CefrLevel'
+        dailyGoalXp:
+          maximum: 1000
+          minimum: 5
+          type: integer
+          format: int32
+          nullable: true
+        speechRate:
+          maximum: 2
+          minimum: 0.5
+          type: number
+          format: double
+          nullable: true
+        preferredAiProvider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        preferredChatModel:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        wantsCorrectionHints:
+          type: boolean
+          nullable: true
+        pushNotificationsEnabled:
+          type: boolean
+          nullable: true
+      additionalProperties: false
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        targetLanguageId:
+          type: string
+          format: uuid
+        targetLanguageCode:
+          type: string
+          nullable: true
+        targetLanguageName:
+          type: string
+          nullable: true
+        interfaceLanguageId:
+          type: string
+          format: uuid
+        level:
+          type: string
+          nullable: true
+        targetLevel:
+          type: string
+          nullable: true
+        dailyGoalXp:
+          type: integer
+          format: int32
+        speechRate:
+          type: number
+          format: double
+        totalXp:
+          type: integer
+          format: int32
+        currentStreak:
+          type: integer
+          format: int32
+        longestStreak:
+          type: integer
+          format: int32
+        preferredAiProvider:
+          type: string
+          nullable: true
+        emailConfirmed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    UserRole:
+      enum:
+      - Learner
+      - Teacher
+      - Admin
+      type: string
+    UserWordResponse:
+      type: object
+      properties:
+        userLexicalUnitId:
+          type: string
+          format: uuid
+        lexicalUnitId:
+          type: string
+          format: uuid
+        text:
+          type: string
+          nullable: true
+        translation:
+          type: string
+          nullable: true
+        transcription:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+        partOfSpeech:
+          type: string
+          nullable: true
+        exampleTarget:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        suspended:
+          type: boolean
+        masteryScore:
+          type: integer
+          format: int32
+        correctStreak:
+          type: integer
+          format: int32
+        incorrectStreak:
+          type: integer
+          format: int32
+        personalNote:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        addedAt:
+          type: string
+          format: date-time
+        lastReviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+      additionalProperties: false
+    UserWordResponsePagedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserWordResponse'
+          nullable: true
+        page:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+        totalPages:
+          type: integer
+          format: int32
+      additionalProperties: false
+    ValidationProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        status:
+          type: integer
+          format: int32
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+        instance:
+          type: string
+          nullable: true
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          nullable: true
+      additionalProperties: {}
+    WordOfTheDayResponse:
+      type: object
+      properties:
+        word:
+          $ref: '#/components/schemas/LexicalUnitResponse'
+        reason:
+          type: string
+          nullable: true
+        audioUrl:
+          type: string
+          nullable: true
+      additionalProperties: false
+    WordScoreResponse:
+      type: object
+      properties:
+        word:
+          type: string
+          nullable: true
+        expected:
+          type: string
+          nullable: true
+        recognized:
+          type: string
+          nullable: true
+        score:
+          type: integer
+          format: int32
+        hint:
+          type: string
+          nullable: true
+      additionalProperties: false
+  securitySchemes:
+    Bearer:
+      type: http
+      description: Вставьте access-токен, полученный из /api/v1/auth/login
+      scheme: bearer
+      bearerFormat: JWT
+security:
+- {}
+tags:
+- name: Admin
+- name: Ai
+- name: Auth
+- name: Catalog
+- name: Decks
+- name: Dictionary
+- name: Exercises
+- name: Practice
+- name: Speech
+- name: Tutor
+- name: Users

@@ -23,6 +23,10 @@ export function Layout() {
     { to: '/practice', labelKey: 'nav.practice' },
   ]
 
+  if (user && (user.role === 'Admin' || user.role === 'Teacher')) {
+    items.push({ to: '/admin', labelKey: 'nav.admin' })
+  }
+
   const handleSignOut = async () => {
     await signOut()
     navigate('/login', { replace: true })

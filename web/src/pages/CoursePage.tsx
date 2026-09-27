@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { catalogApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
 import { EmptyState, ErrorState, ProgressBar, Spinner } from '../components/Feedback'
 import { PageHeader } from '../components/PageHeader'
 import { useI18n } from '../i18n'
@@ -8,6 +9,8 @@ import { useI18n } from '../i18n'
 export function CoursePage() {
   const { t, plural, formatNumber } = useI18n()
   const { slug = '' } = useParams()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Teacher'
 
   const course = useQuery({ queryKey: ['course', slug], queryFn: () => catalogApi.course(slug) })
   const lessons = useQuery({ queryKey: ['lessons', slug], queryFn: () => catalogApi.lessons(slug) })
@@ -33,6 +36,11 @@ export function CoursePage() {
           <div className="course-card__head">
             <span className="badge badge--level">{data.level}</span>
             {data.isEnrolled ? <span className="badge badge--success">{t('catalog.enrolled')}</span> : null}
+            {isAdmin ? (
+              <Link className="button button--ghost" to={`/admin?tab=courses&edit=${data.id}`}>
+                {t('admin.editCourse')}
+              </Link>
+            ) : null}
           </div>
         }
       />
@@ -79,6 +87,8 @@ export function CoursePage() {
 export function LessonPage() {
   const { t, formatNumber } = useI18n()
   const { lessonId = '' } = useParams()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Teacher'
 
   const lesson = useQuery({ queryKey: ['lesson', lessonId], queryFn: () => catalogApi.lesson(lessonId) })
 
@@ -97,9 +107,16 @@ export function LessonPage() {
         title={data.title}
         subtitle={data.summary ?? undefined}
         actions={
-          <span className={`badge badge--${data.status.toLowerCase()}`}>
-            {t(`catalog.lessonStatus.${data.status}` as 'catalog.lessonStatus.NotStarted')}
-          </span>
+          <div className="course-card__head">
+            <span className={`badge badge--${data.status.toLowerCase()}`}>
+              {t(`catalog.lessonStatus.${data.status}` as 'catalog.lessonStatus.NotStarted')}
+            </span>
+            {isAdmin ? (
+              <Link className="button button--ghost" to={`/admin?tab=lessons&edit=${data.id}`}>
+                {t('admin.editLesson')}
+              </Link>
+            ) : null}
+          </div>
         }
       />
 

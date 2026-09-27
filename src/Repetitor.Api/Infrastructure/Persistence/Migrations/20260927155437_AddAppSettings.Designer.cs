@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Repetitor.Api.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Repetitor.Api.Infrastructure.Persistence;
 namespace Repetitor.Api.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927155437_AddAppSettings")]
+    partial class AddAppSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1417,23 +1420,6 @@ namespace Repetitor.Api.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("user_lexical_units", (string)null);
-                });
-
-            modelBuilder.Entity("Repetitor.Api.Infrastructure.Persistence.AppSetting", b =>
-                {
-                    b.Property<string>("Key")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<string>("Value")
-                        .HasColumnType("jsonb");
-
-                    b.HasKey("Key");
-
-                    b.ToTable("app_settings", (string)null);
                 });
 
             modelBuilder.Entity("Repetitor.Api.Domain.Entities.ChatMessage", b =>

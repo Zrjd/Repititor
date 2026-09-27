@@ -64,6 +64,7 @@ builder.Services.AddScoped<IAiGateway, AiGateway>();
 builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IVectorSearchService, VectorSearchService>();
 builder.Services.AddScoped<IExerciseGeneratorService, ExerciseGeneratorService>();
+builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
 builder.Services.AddScoped<ITutorChatService, TutorChatService>();
 builder.Services.AddScoped<IAnswerGradingService, AnswerGradingService>();
 builder.Services.AddScoped<IPronunciationService, PronunciationService>();
