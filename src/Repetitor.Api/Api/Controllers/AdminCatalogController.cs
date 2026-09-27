@@ -242,8 +242,9 @@ public sealed class AdminCatalogController(
     public async Task<ActionResult<GenerateLessonContentResponse>> GenerateLesson(
         Guid id, [FromBody] GenerateLessonContentRequest request, CancellationToken ct)
     {
+        var lessonPrompt = await LoadLessonPromptAsync(ct);
         var result = await contentGeneration.GenerateLessonAsync(
-            id, request.Topic, request.Level, request.Requirements, request.Provider, request.Model, ct);
+            id, request.Topic, request.Level, request.Requirements, request.Provider, request.Model, lessonPrompt, ct);
 
         return Ok(new GenerateLessonContentResponse(
             result.Title, result.Summary, result.ContentMarkdown, result.KeyVocabulary,
@@ -271,31 +272,10 @@ public sealed class AdminCatalogController(
 
     [HttpGet("ai-settings")]
     [ProducesResponseType(typeof(AiSettingsResponse), StatusCodes.Status200OK)]
-    public ActionResult<AiSettingsResponse> GetAiSettings()
+    public async Task<ActionResult<AiSettingsResponse>> GetAiSettings(CancellationToken ct)
     {
-        var opts = aiOptions.Value;
-        return Ok(new AiSettingsResponse
-        {
-            DefaultChatProvider = opts.DefaultChatProvider,
-            DefaultEmbeddingProvider = opts.DefaultEmbeddingProvider,
-            DefaultChatModel = opts.DefaultChatModel,
-            Temperature = opts.Temperature,
-            MaxOutputTokens = opts.MaxOutputTokens,
-            Providers = opts.Providers.Select(p => new AiProviderSettingsResponse
-            {
-                Name = p.Key,
-                Kind = p.Value.Kind,
-                BaseUrl = p.Value.BaseUrl,
-                ApiKey = p.Value.ApiKey,
-                ChatModel = p.Value.ChatModel,
-                EmbeddingModel = p.Value.EmbeddingModel,
-                TtsModel = p.Value.TtsModel,
-                SttModel = p.Value.SttModel,
-                Enabled = p.Value.Enabled,
-                TimeoutSeconds = p.Value.TimeoutSeconds,
-                RequestsPerMinute = p.Value.RequestsPerMinute
-            }).ToList()
-        });
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return Ok(await BuildAiSettingsResponse(db, ct));
     }
 
     [HttpPut("ai-settings")]
@@ -311,6 +291,7 @@ public sealed class AdminCatalogController(
         if (request.DefaultChatModel is { } m) json["defaultChatModel"] = m;
         if (request.Temperature is { } t) json["temperature"] = t;
         if (request.MaxOutputTokens is { } max) json["maxOutputTokens"] = max;
+        if (request.LessonPrompt is { } lp) json["lessonPrompt"] = lp;
 
         if (request.Providers is { Count: > 0 })
         {
@@ -372,6 +353,14 @@ public sealed class AdminCatalogController(
         }
     }
 
+    private async Task<string?> LoadLessonPromptAsync(CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var setting = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AiSettingsKey, ct);
+        var json = setting?.Value as JsonObject;
+        return json?["lessonPrompt"]?.GetValue<string>();
+    }
+
     private async Task<AiSettingsResponse> BuildAiSettingsResponse(AppDbContext db, CancellationToken ct)
     {
         var setting = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AiSettingsKey, ct);
@@ -405,6 +394,7 @@ public sealed class AdminCatalogController(
             DefaultChatModel = json["defaultChatModel"]?.GetValue<string>() ?? opts.DefaultChatModel,
             Temperature = json["temperature"]?.GetValue<double>() ?? opts.Temperature,
             MaxOutputTokens = json["maxOutputTokens"]?.GetValue<int>() ?? opts.MaxOutputTokens,
+            LessonPrompt = json["lessonPrompt"]?.ToString() ?? string.Empty,
             Providers = providers
         };
     }
