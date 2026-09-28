@@ -2,12 +2,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Domain.Entities;
 using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -16,7 +15,8 @@ namespace Repetitor.Api.Api.Controllers;
 [Route("api/v1/exercises")]
 [Authorize]
 public sealed class ExercisesController(
-    IDbContextFactory<AppDbContext> dbFactory,
+    IExerciseDbService exercises,
+    IUserDbService users,
     IExerciseGeneratorService generator,
     IAnswerGradingService grading,
     IProgressService progress,
@@ -38,63 +38,12 @@ public sealed class ExercisesController(
         [FromQuery] bool publishedOnly = false,
         CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var result = await exercises.ListAsync(
+            CurrentUserAccessor.GetUserId(User), type, courseId, lessonId,
+            mine, publishedOnly, Math.Max(request.Page, 1), request.PageSize, ct);
 
-        var query = db.Exercises.Where(e => e.IsActive);
-        if (mine)
-        {
-            query = query.Where(e => e.OwnerUserId == userId);
-        }
-        else if (publishedOnly)
-        {
-            query = query.Where(e => e.IsPublished);
-        }
-
-        if (type is { } t)
-        {
-            query = query.Where(e => e.Type == t);
-        }
-
-        if (courseId is { } c)
-        {
-            query = query.Where(e => e.CourseId == c);
-        }
-
-        if (lessonId is { } l)
-        {
-            query = query.Where(e => e.LessonId == l);
-        }
-
-        var total = await query.CountAsync(ct);
-        var page = Math.Max(request.Page, 1);
-
-        var rows = await query
-            .OrderByDescending(e => e.CreatedAt)
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(e => new
-            {
-                e.Id, e.Type, e.Title, e.Instructions, e.Level, e.Points, e.EstimatedSeconds,
-                e.Source, e.AiProvider, e.AiModel, e.CourseId, e.LessonId, e.IsPublished, e.CreatedAt, e.Payload
-            })
-            .ToListAsync(ct);
-
-        var ids = rows.Select(r => r.Id).ToArray();
-        var attempts = await db.ExerciseAttempts
-            .Where(a => a.UserId == userId && ids.Contains(a.ExerciseId))
-            .GroupBy(a => a.ExerciseId)
-            .Select(g => new { ExerciseId = g.Key, Count = g.Count(), Best = g.Max(a => a.ScorePercent) })
-            .ToDictionaryAsync(x => x.ExerciseId, ct);
-
-        var items = rows.Select(r => new ExerciseSummaryResponse(
-            r.Id, r.Type.ToString(), r.Title, r.Instructions, r.Level.ToString(), CountItems(r.Payload),
-            r.Points, r.EstimatedSeconds, r.Source.ToString(), r.AiProvider, r.AiModel,
-            r.CourseId, r.LessonId, r.IsPublished, r.CreatedAt,
-            attempts.GetValueOrDefault(r.Id) is { } a ? a.Best : null,
-            attempts.GetValueOrDefault(r.Id)?.Count ?? 0)).ToArray();
-
-        return Ok(new PagedResponse<ExerciseSummaryResponse>(items, page, request.PageSize, total));
+        return Ok(new PagedResponse<ExerciseSummaryResponse>(
+            result.Items.Select(ToSummary).ToArray(), result.Page, result.PageSize, result.Total));
     }
 
     /// <summary>
@@ -108,20 +57,14 @@ public sealed class ExercisesController(
     public async Task<ActionResult<ExerciseResponse>> Get(Guid id, [FromQuery] bool includeAnswers = false, CancellationToken ct = default)
     {
         var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var exercise = await db.Exercises.FirstOrDefaultAsync(e => e.Id == id, ct);
+        var exercise = await exercises.FindAsync(id, ct);
         if (exercise is null)
         {
             return NotFound();
         }
 
-        var stats = await db.ExerciseAttempts
-            .Where(a => a.ExerciseId == id && a.UserId == userId)
-            .GroupBy(a => a.UserId)
-            .Select(g => new { Count = g.Count(), Best = g.Max(a => a.ScorePercent) })
-            .FirstOrDefaultAsync(ct);
-
-        return Ok(ToResponse(exercise, includeAnswers, stats?.Count ?? 0, stats?.Best));
+        var stats = await exercises.GetUserStatsAsync(id, userId, ct);
+        return Ok(ToResponse(exercise, includeAnswers, stats.Count, stats.BestScorePercent));
     }
 
     /// <summary>
@@ -160,8 +103,8 @@ public sealed class ExercisesController(
             user.InterfaceLanguageId,
             Persist: true), ct);
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var exercise = await db.Exercises.AsNoTracking().FirstAsync(e => e.Id == report.Exercise.Id, ct);
+        var exercise = await exercises.FindNoTrackingAsync(report.Exercise.Id, ct)
+            ?? throw new InvalidOperationException("Сгенерированное упражнение не найдено.");
 
         if (lexicalUnitIds.Length > 0)
         {
@@ -186,31 +129,21 @@ public sealed class ExercisesController(
             return Unauthorized();
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var exercise = await db.Exercises.FirstOrDefaultAsync(e => e.Id == id, ct);
-        if (exercise is null)
+        var result = await exercises.UpdateAsync(
+            id,
+            new ExerciseUpdate(
+                request.Title, request.Instructions, request.Prompt, request.Payload,
+                request.ExplanationMarkdown, request.Level, request.Points,
+                request.EstimatedSeconds, request.IsPublished, request.IsActive),
+            new DbActor(user.Id, user.Role),
+            ct);
+
+        return result.Status switch
         {
-            return NotFound();
-        }
-
-        if (exercise.OwnerUserId is not null && exercise.OwnerUserId != user.Id && user.Role == UserRole.Learner)
-        {
-            return Forbid();
-        }
-
-        if (request.Title is not null) exercise.Title = request.Title;
-        if (request.Instructions is not null) exercise.Instructions = request.Instructions;
-        if (request.Prompt is not null) exercise.Prompt = request.Prompt;
-        if (request.Payload is not null) exercise.Payload = request.Payload;
-        if (request.ExplanationMarkdown is not null) exercise.ExplanationMarkdown = request.ExplanationMarkdown;
-        if (request.Level is { } level) exercise.Level = level;
-        if (request.Points is { } points) exercise.Points = points;
-        if (request.EstimatedSeconds is { } seconds) exercise.EstimatedSeconds = seconds;
-        if (request.IsPublished is { } published) exercise.IsPublished = published;
-        if (request.IsActive is { } active) exercise.IsActive = active;
-
-        await db.SaveChangesAsync(ct);
-        return Ok(ToResponse(exercise, true, 0, null));
+            ExerciseMutationStatus.NotFound => NotFound(),
+            ExerciseMutationStatus.Forbidden => Forbid(),
+            _ => Ok(ToResponse(result.Exercise!, true, 0, null))
+        };
     }
 
     /// <summary>
@@ -222,22 +155,13 @@ public sealed class ExercisesController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var exercise = await db.Exercises.FirstOrDefaultAsync(e => e.Id == id, ct);
-        if (exercise is null)
+        var status = await exercises.DeactivateAsync(id, CurrentUserAccessor.GetUserId(User), ct);
+        return status switch
         {
-            return NotFound();
-        }
-
-        if (exercise.OwnerUserId is not null && exercise.OwnerUserId != userId)
-        {
-            return Forbid();
-        }
-
-        exercise.IsActive = false;
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+            ExerciseMutationStatus.NotFound => NotFound(),
+            ExerciseMutationStatus.Forbidden => Forbid(),
+            _ => NoContent()
+        };
     }
 
     /// <summary>
@@ -251,8 +175,7 @@ public sealed class ExercisesController(
     public async Task<ActionResult<ExerciseAttemptResponse>> Submit(Guid id, SubmitExerciseRequest request, CancellationToken ct)
     {
         var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var exercise = await db.Exercises.FirstOrDefaultAsync(e => e.Id == id, ct);
+        var exercise = await exercises.FindAsync(id, ct);
         if (exercise is null)
         {
             return NotFound();
@@ -286,17 +209,8 @@ public sealed class ExercisesController(
             StartedAt = DateTimeOffset.UtcNow.AddMilliseconds(-Math.Clamp(request.DurationMs, 0, 86_400_000)),
             CompletedAt = DateTimeOffset.UtcNow
         };
-        db.ExerciseAttempts.Add(attempt);
 
-        exercise.UsageCount++;
-        exercise.LastUsedAt = DateTimeOffset.UtcNow;
-        if (exercise.UsageCount > 0)
-        {
-            var rate = (exercise.CorrectRateBasisPoints * (exercise.UsageCount - 1) + correct * 10_000) / exercise.UsageCount;
-            exercise.CorrectRateBasisPoints = rate;
-        }
-
-        await db.SaveChangesAsync(ct);
+        var saved = await exercises.RecordAttemptAsync(exercise, attempt, correct, ct);
         await progress.RegisterActivityAsync(userId, xp, 0, correct, 0, 1, 0, request.DurationMs / 1000, ct);
 
         return Ok(new ExerciseAttemptResponse(
@@ -315,14 +229,8 @@ public sealed class ExercisesController(
     [ProducesResponseType(typeof(ExerciseAttemptResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ExerciseAttemptResponse[]>> Attempts(Guid id, [FromQuery] int limit = 20, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var attempts = await db.ExerciseAttempts
-            .Where(a => a.ExerciseId == id && a.UserId == userId)
-            .OrderByDescending(a => a.CompletedAt)
-            .Take(Math.Clamp(limit, 1, 100))
-            .ToListAsync(ct);
+        var attempts = await exercises.GetUserAttemptsAsync(
+            id, CurrentUserAccessor.GetUserId(User), Math.Clamp(limit, 1, 100), ct);
 
         return Ok(attempts.Select(a => new ExerciseAttemptResponse(
             a.Id, a.ExerciseId, a.ScorePercent, a.IsPassed, a.CorrectCount, a.TotalCount, a.XpEarned,
@@ -338,14 +246,8 @@ public sealed class ExercisesController(
     [ProducesResponseType(typeof(ExerciseAttemptResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ExerciseAttemptResponse[]>> History([FromQuery] int limit = 50, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var attempts = await db.ExerciseAttempts
-            .Where(a => a.UserId == userId)
-            .OrderByDescending(a => a.CompletedAt)
-            .Take(Math.Clamp(limit, 1, 200))
-            .ToListAsync(ct);
+        var attempts = await exercises.GetAttemptHistoryAsync(
+            CurrentUserAccessor.GetUserId(User), Math.Clamp(limit, 1, 200), ct);
 
         return Ok(attempts.Select(a => new ExerciseAttemptResponse(
             a.Id, a.ExerciseId, a.ScorePercent, a.IsPassed, a.CorrectCount, a.TotalCount, a.XpEarned,
@@ -367,40 +269,20 @@ public sealed class ExercisesController(
             return Unauthorized();
         }
 
-        var userId = user.Id;
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var items = await exercises.GetRecommendedAsync(
+            user.Id, user.Level, Math.Clamp(limit, 1, 20), ct);
 
-        var exercises = await db.Exercises
-            .Where(e => e.IsActive && e.IsPublished && e.Level <= user.Level)
-            .OrderBy(e => e.UsageCount)
-            .Take(Math.Clamp(limit, 1, 20) * 4)
-            .ToListAsync(ct);
-
-        var tried = await db.ExerciseAttempts
-            .Where(a => a.UserId == userId)
-            .GroupBy(a => a.ExerciseId)
-            .Select(g => new { ExerciseId = g.Key, Last = g.Max(a => a.CompletedAt), Best = g.Max(a => a.ScorePercent) })
-            .ToDictionaryAsync(x => x.ExerciseId, ct);
-
-        var selected = exercises
-            .Where(e => !tried.TryGetValue(e.Id, out var t) || t.Best < 90)
-            .OrderBy(e => tried.TryGetValue(e.Id, out var t) ? t.Last : DateTimeOffset.MinValue)
-            .Take(Math.Clamp(limit, 1, 20))
-            .ToList();
-
-        return Ok(selected.Select(e => new ExerciseSummaryResponse(
-            e.Id, e.Type.ToString(), e.Title, e.Instructions, e.Level.ToString(), CountItems(e.Payload),
-            e.Points, e.EstimatedSeconds, e.Source.ToString(), e.AiProvider, e.AiModel,
-            e.CourseId, e.LessonId, e.IsPublished, e.CreatedAt,
-            tried.GetValueOrDefault(e.Id)?.Best, tried.GetValueOrDefault(e.Id) is null ? 0 : 1)).ToArray());
+        return Ok(items.Select(ToSummary).ToArray());
     }
 
-    private async Task<User?> LoadUserAsync(CancellationToken ct)
-    {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-    }
+    /// <summary>Собирает краткую карточку упражнения из записи, полученной от слоя доступа к данным.</summary>
+    private static ExerciseSummaryResponse ToSummary(ExerciseListItem e) => new(
+        e.Id, e.Type, e.Title, e.Instructions, e.Level, CountItems(e.Payload),
+        e.Points, e.EstimatedSeconds, e.Source, e.AiProvider, e.AiModel,
+        e.CourseId, e.LessonId, e.IsPublished, e.CreatedAt, e.BestScorePercent, e.Attempts);
+
+    private async Task<User?> LoadUserAsync(CancellationToken ct) =>
+        await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
 
     private static ExerciseResponse ToResponse(Exercise e, bool includeAnswers, int attempts, int? best)
     {

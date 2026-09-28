@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
-using Repetitor.Api.Infrastructure.Services;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Domain.Enums;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -12,7 +10,7 @@ namespace Repetitor.Api.Api.Controllers;
 [ApiController]
 [Route("api/v1/catalog")]
 [AllowAnonymous]
-public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory) : ControllerBase
+public sealed class CatalogController(ICatalogDbService catalog) : ControllerBase
 {
     /// <summary>
     /// Получает список всех доступных языков для обучения.
@@ -23,13 +21,7 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(typeof(LanguageResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<LanguageResponse[]>> Languages(CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var languages = await db.Languages
-            .Where(l => l.IsEnabled)
-            .OrderBy(l => l.SortOrder)
-            .ThenBy(l => l.NameEnglish)
-            .ToListAsync(ct);
-
+        var languages = await catalog.GetEnabledLanguagesAsync(ct);
         return Ok(languages.Select(l => l.ToResponse()).ToArray());
     }
 
@@ -43,8 +35,7 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LanguageResponse>> Language(string code, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var language = await db.Languages.FirstOrDefaultAsync(l => l.Code == code.ToLowerInvariant(), ct);
+        var language = await catalog.FindLanguageByCodeAsync(code.ToLowerInvariant(), ct);
         return language is null ? NotFound() : Ok(language.ToResponse());
     }
 
@@ -57,49 +48,13 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(typeof(CourseResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<CourseResponse[]>> Courses([FromQuery] Guid? languageId, [FromQuery] CefrLevel? level, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
         var userId = CurrentUserAccessor.GetUserId(User);
+        var courses = await catalog.GetPublishedCoursesAsync(userId, languageId, level, ct);
 
-        var query = db.Courses
-            .Include(c => c.Language)
-            .Include(c => c.Lessons)
-            .Where(c => c.IsPublished);
-
-        if (languageId is { } lid)
-        {
-            query = query.Where(c => c.LanguageId == lid);
-        }
-
-        if (level is { } lvl)
-        {
-            query = query.Where(c => c.Level == lvl);
-        }
-
-        var courses = await query
-            .OrderBy(c => c.Language!.SortOrder)
-            .ThenBy(c => c.SortOrder)
-            .ThenBy(c => c.Title)
-            .ToListAsync(ct);
-
-        var enrollments = userId == Guid.Empty
-            ? []
-            : await db.Enrollments
-                .Include(e => e.LessonProgress)
-                .Where(e => e.UserId == userId)
-                .ToDictionaryAsync(e => e.CourseId, ct);
-
-        var result = courses.Select(c =>
-        {
-            var enrollment = enrollments.GetValueOrDefault(c.Id);
-            var progress = enrollment?.LessonProgress.Count ?? 0;
-            var percent = c.Lessons.Count == 0 ? 0 : (int)Math.Round(progress * 100d / c.Lessons.Count);
-            return new CourseResponse(
-                c.Id, c.Slug, c.Title, c.Description, c.Level.ToString(),
-                c.LanguageId, c.Language!.Code, c.CoverUrl, c.AccentColor, c.EstimatedMinutes,
-                c.Lessons.Count(l => l.IsPublished), percent, enrollment is not null);
-        }).ToArray();
-
-        return Ok(result);
+        return Ok(courses.Select(c => new CourseResponse(
+            c.Id, c.Slug, c.Title, c.Description, c.Level,
+            c.LanguageId, c.LanguageCode, c.CoverUrl, c.AccentColor, c.EstimatedMinutes,
+            c.PublishedLessonsCount, c.ProgressPercent, c.IsEnrolled)).ToArray());
     }
 
     /// <summary>
@@ -112,29 +67,17 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CourseResponse>> Course(string slug, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var course = await db.Courses
-            .Include(c => c.Language)
-            .Include(c => c.Lessons)
-            .FirstOrDefaultAsync(c => c.Slug == slug, ct);
-
+        var userId = CurrentUserAccessor.GetUserId(User);
+        var course = await catalog.GetPublishedCourseAsync(userId, slug, ct);
         if (course is null)
         {
             return NotFound();
         }
 
-        var userId = CurrentUserAccessor.GetUserId(User);
-        var enrollment = userId == Guid.Empty
-            ? null
-            : await db.Enrollments.Include(e => e.LessonProgress).FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == course.Id, ct);
-        var progress = enrollment?.LessonProgress.Count ?? 0;
-
         return Ok(new CourseResponse(
-            course.Id, course.Slug, course.Title, course.Description, course.Level.ToString(),
-            course.LanguageId, course.Language!.Code, course.CoverUrl, course.AccentColor, course.EstimatedMinutes,
-            course.Lessons.Count(l => l.IsPublished),
-            course.Lessons.Count == 0 ? 0 : (int)Math.Round(progress * 100d / course.Lessons.Count),
-            enrollment is not null));
+            course.Id, course.Slug, course.Title, course.Description, course.Level,
+            course.LanguageId, course.LanguageCode, course.CoverUrl, course.AccentColor, course.EstimatedMinutes,
+            course.PublishedLessonsCount, course.ProgressPercent, course.IsEnrolled));
     }
 
     /// <summary>
@@ -146,37 +89,16 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(typeof(LessonResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<LessonResponse[]>> Lessons(string slug, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var courseId = await db.Courses.Where(c => c.Slug == slug).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
-        if (courseId is null)
+        var userId = CurrentUserAccessor.GetUserId(User);
+        var result = await catalog.GetCourseLessonsAsync(userId, slug, ct);
+        if (!result.CourseExists)
         {
             return NotFound();
         }
 
-        var userId = CurrentUserAccessor.GetUserId(User);
-        var progress = userId == Guid.Empty
-            ? new Dictionary<Guid, LessonProgressRow>()
-            : await db.Enrollments
-                .Where(e => e.UserId == userId && e.CourseId == courseId)
-                .SelectMany(e => e.LessonProgress)
-                .Select(p => new LessonProgressRow(p.LessonId, p.Status.ToString(), p.ProgressPercent, p.BestScorePercent))
-                .ToDictionaryAsync(p => p.LessonId, ct);
-
-        var lessons = await db.Lessons
-            .Where(l => l.CourseId == courseId && l.IsPublished)
-            .OrderBy(l => l.SortOrder)
-            .ToListAsync(ct);
-
-        return Ok(lessons.Select(l =>
-        {
-            var p = progress.GetValueOrDefault(l.Id);
-            return new LessonResponse(
-                l.Id, l.CourseId, l.Slug, l.Title, l.Summary, l.SortOrder, l.EstimatedMinutes,
-                l.KeyVocabulary, null,
-                p?.Status ?? nameof(Domain.Enums.LessonProgressStatus.NotStarted),
-                p?.ProgressPercent ?? 0,
-                p?.BestScorePercent ?? 0);
-        }).ToArray());
+        return Ok(result.Lessons.Select(l => new LessonResponse(
+            l.Id, l.CourseId, l.Slug, l.Title, l.Summary, l.SortOrder, l.EstimatedMinutes,
+            l.KeyVocabulary, l.ContentMarkdown, l.Status, l.ProgressPercent, l.BestScorePercent)).ToArray());
     }
 
     /// <summary>
@@ -189,27 +111,17 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LessonResponse>> Lesson(Guid lessonId, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == lessonId, ct);
+        var userId = CurrentUserAccessor.GetUserId(User);
+        var lesson = await catalog.GetLessonAsync(userId, lessonId, ct);
         if (lesson is null)
         {
             return NotFound();
         }
 
-        var userId = CurrentUserAccessor.GetUserId(User);
-        var progress = userId == Guid.Empty
-            ? null
-            : await db.Enrollments
-                .Where(e => e.UserId == userId && e.CourseId == lesson.CourseId)
-                .SelectMany(e => e.LessonProgress)
-                .FirstOrDefaultAsync(p => p.LessonId == lessonId, ct);
-
         return Ok(new LessonResponse(
             lesson.Id, lesson.CourseId, lesson.Slug, lesson.Title, lesson.Summary,
             lesson.SortOrder, lesson.EstimatedMinutes, lesson.KeyVocabulary, lesson.ContentMarkdown,
-            progress?.Status.ToString() ?? nameof(Domain.Enums.LessonProgressStatus.NotStarted),
-            progress?.ProgressPercent ?? 0,
-            progress?.BestScorePercent ?? 0));
+            lesson.Status, lesson.ProgressPercent, lesson.BestScorePercent));
     }
 
     /// <summary>
@@ -221,26 +133,10 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(typeof(GrammarTopicResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<GrammarTopicResponse[]>> Grammar([FromQuery] Guid? languageId, [FromQuery] CefrLevel? maxLevel, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var query = db.GrammarTopics.Where(g => g.IsPublished);
+        var topics = await catalog.GetGrammarTopicsAsync(languageId, maxLevel, ct);
 
-        if (languageId is { } lid)
-        {
-            query = query.Where(g => g.LanguageId == lid);
-        }
-
-        if (maxLevel is { } lvl)
-        {
-            query = query.Where(g => g.MinLevel <= lvl);
-        }
-
-        var topics = await query
-            .OrderBy(g => g.MinLevel)
-            .ThenBy(g => g.Title)
-            .Select(g => new GrammarTopicResponse(g.Id, g.Slug, g.Title, g.Summary, g.MinLevel.ToString(), g.ExplanationMarkdown))
-            .ToListAsync(ct);
-
-        return Ok(topics);
+        return Ok(topics.Select(g => new GrammarTopicResponse(
+            g.Id, g.Slug, g.Title, g.Summary, g.MinLevel, g.ExplanationMarkdown)).ToArray());
     }
 
     /// <summary>
@@ -253,13 +149,9 @@ public sealed class CatalogController(IDbContextFactory<AppDbContext> dbFactory)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<GrammarTopicResponse>> GrammarTopic(Guid id, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var topic = await db.GrammarTopics.FirstOrDefaultAsync(g => g.Id == id, ct);
+        var topic = await catalog.GetGrammarTopicAsync(id, ct);
         return topic is null
             ? NotFound()
-            : Ok(new GrammarTopicResponse(topic.Id, topic.Slug, topic.Title, topic.Summary,
-                topic.MinLevel.ToString(), topic.ExplanationMarkdown));
+            : Ok(new GrammarTopicResponse(topic.Id, topic.Slug, topic.Title, topic.Summary, topic.MinLevel, topic.ExplanationMarkdown));
     }
-
-    private sealed record LessonProgressRow(Guid LessonId, string Status, int ProgressPercent, int BestScorePercent);
 }

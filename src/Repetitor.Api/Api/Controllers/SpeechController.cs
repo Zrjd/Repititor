@@ -1,12 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Configuration;
 using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 using Repetitor.Api.Domain.Entities;
 using Repetitor.Api.Infrastructure.Ai;
@@ -20,7 +19,10 @@ public sealed class SpeechController(
     ISpeechService speech,
     IPronunciationService pronunciation,
     IMediaStorage storage,
-    IDbContextFactory<AppDbContext> dbFactory,
+    IMediaDbService media,
+    IUserDbService users,
+    ICatalogDbService catalog,
+    ILexiconDbService lexicon,
     IProgressService progress,
     IOptions<MediaOptions> mediaOptions) : ControllerBase
 {
@@ -159,8 +161,7 @@ public sealed class SpeechController(
         string? transcriptionHint = null;
         if (request.LexicalUnitId is { } lexicalUnitId)
         {
-            await using var db = await dbFactory.CreateDbContextAsync(ct);
-            var unit = await db.LexicalUnits.AsNoTracking().FirstOrDefaultAsync(u => u.Id == lexicalUnitId, ct);
+            var unit = await lexicon.FindUnitAsync(lexicalUnitId, ct);
             transcriptionHint = unit?.Transcription;
         }
 
@@ -202,29 +203,25 @@ public sealed class SpeechController(
             XpEarned = xp
         };
 
-        await using (var db = await dbFactory.CreateDbContextAsync(ct))
-        {
-            db.PronunciationAttempts.Add(attempt);
-            await db.SaveChangesAsync(ct);
-        }
+        var saved = await media.AddPronunciationAttemptAsync(attempt, ct);
 
         await progress.RegisterActivityAsync(user.Id, xp, 0, 0, 0, 0, 0, 0, ct);
 
         return StatusCode(StatusCodes.Status201Created, new PronunciationResponse(
-            attempt.Id,
-            attempt.TargetText,
-            attempt.RecognizedText,
-            attempt.OverallScore,
-            attempt.AccuracyScore,
-            attempt.FluencyScore,
-            attempt.CompletenessScore,
-            attempt.ProsodyScore,
+            saved.Id,
+            saved.TargetText,
+            saved.RecognizedText,
+            saved.OverallScore,
+            saved.AccuracyScore,
+            saved.FluencyScore,
+            saved.CompletenessScore,
+            saved.ProsodyScore,
             result.Feedback,
             result.Words.Select(w => new WordScoreResponse(w.Word, w.Expected, w.Recognized, w.Score, w.Hint)).ToArray(),
             result.Method,
             stored.Url,
             xp,
-            attempt.CreatedAt));
+            saved.CreatedAt));
     }
 
     /// <summary>
@@ -237,13 +234,8 @@ public sealed class SpeechController(
     [ProducesResponseType(typeof(PronunciationResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<PronunciationResponse[]>> Attempts([FromQuery] int limit = 50, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var attempts = await db.PronunciationAttempts
-            .Where(a => a.UserId == userId)
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(Math.Clamp(limit, 1, 200))
-            .ToListAsync(ct);
+        var attempts = await media.GetPronunciationAttemptsAsync(
+            CurrentUserAccessor.GetUserId(User), Math.Clamp(limit, 1, 200), ct);
 
         return Ok(attempts.Select(a => new PronunciationResponse(
             a.Id, a.TargetText, a.RecognizedText, a.OverallScore, a.AccuracyScore, a.FluencyScore,
@@ -261,27 +253,22 @@ public sealed class SpeechController(
     [ProducesResponseType(typeof(object[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<object[]>> Recordings([FromQuery] int limit = 50, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var assets = await db.MediaAssets
-            .Where(a => a.UserId == userId)
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(Math.Clamp(limit, 1, 200))
-            .Select(a => new
+        var assets = await media.GetRecordingsAsync(CurrentUserAccessor.GetUserId(User), Math.Clamp(limit, 1, 200), ct);
+
+        return Ok(assets
+            .Select(a => (object)new
             {
                 a.Id,
-                Kind = a.Kind.ToString(),
+                a.Kind,
                 a.ContentType,
                 a.SizeBytes,
                 a.DurationMs,
                 a.SourceText,
                 a.CreatedAt,
                 a.ExpiresAt,
-                Url = "/media/" + a.StoragePath
+                a.Url
             })
-            .ToListAsync(ct);
-
-        return Ok(assets.Cast<object>().ToArray());
+            .ToArray());
     }
 
     /// <summary>
@@ -295,25 +282,19 @@ public sealed class SpeechController(
     public async Task<IActionResult> DeleteRecording(Guid id, CancellationToken ct)
     {
         var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var asset = await db.MediaAssets.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
+        var asset = await media.FindRecordingAsync(userId, id, ct);
         if (asset is null)
         {
             return NotFound();
         }
 
         storage.Delete(asset.StoragePath);
-        db.MediaAssets.Remove(asset);
-        await db.SaveChangesAsync(ct);
+        await media.DeleteRecordingAsync(userId, id, ct);
         return NoContent();
     }
 
-    private async Task<User?> LoadUserAsync(CancellationToken ct)
-    {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-    }
+    private async Task<User?> LoadUserAsync(CancellationToken ct) =>
+        await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
 
     private async Task<string> ResolveLanguageAsync(string? requested, User user, CancellationToken ct)
     {
@@ -322,6 +303,6 @@ public sealed class SpeechController(
             return requested.Trim().ToLowerInvariant();
         }
 
-        return await dbFactory.ResolveLanguageCodeAsync(user.TargetLanguageId, ct) ?? "en";
+        return await catalog.ResolveLanguageCodeAsync(user.TargetLanguageId, ct) ?? "en";
     }
 }

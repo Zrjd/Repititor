@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -14,7 +13,7 @@ namespace Repetitor.Api.Api.Controllers;
 public sealed class PracticeController(
     IPracticeService practice,
     IEmbeddingService embeddings,
-    IDbContextFactory<AppDbContext> dbFactory) : ControllerBase
+    ILexiconDbService lexicon) : ControllerBase
 {
     /// <summary>
     /// Возвращает карточки, которые готовы к повторению (due cards).
@@ -55,32 +54,10 @@ public sealed class PracticeController(
     public async Task<ActionResult<PracticeSummaryResponse>> Forecast([FromQuery] Guid? deckId, CancellationToken ct)
     {
         var userId = CurrentUserAccessor.GetUserId(User);
-        var summary = await practice.BuildSummaryAsync(userId, deckId, 0, 0, 0, 0, 0, ct);
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var now = DateTimeOffset.UtcNow;
-        var query = from card in db.ReviewCards
-            join ul in db.UserLexicalUnits on card.UserLexicalUnitId equals ul.Id
-            where ul.UserId == userId && card.SuspendedAt == null
-            select card;
-
-        if (deckId is { } deck)
-        {
-            var ids = db.DeckCards.Where(dc => dc.DeckId == deck).Select(dc => dc.UserLexicalUnitId);
-            query = query.Where(c => ids.Contains(c.UserLexicalUnitId));
-        }
-
-        var cards = await query.ToListAsync(ct);
-        var forecast = new List<ForecastDayResponse>();
-        var today = DateOnly.FromDateTime(now.UtcDateTime);
-        for (var i = 0; i < 14; i++)
-        {
-            var date = today.AddDays(i);
-            forecast.Add(new ForecastDayResponse(date, cards.Count(c => DateOnly.FromDateTime(c.DueAt.UtcDateTime) <= date)));
-        }
+        var forecast = await lexicon.BuildForecastAsync(userId, deckId, ForecastDays, DateTimeOffset.UtcNow, ct);
 
         return Ok(new PracticeSummaryResponse(
-            0, 0, 0, 0, 0, 0, await practice.CountDueAsync(userId, deckId, ct), forecast));
+            0, 0, 0, 0, 0, 0, await practice.CountDueAsync(userId, deckId, ct), ToForecast(forecast)));
     }
 
     /// <summary>
@@ -112,32 +89,11 @@ public sealed class PracticeController(
     {
         var userId = CurrentUserAccessor.GetUserId(User);
         var summary = await practice.BuildSummaryAsync(userId, deckId, reviewed, correct, again, newSeen, xp, ct);
-
-        var forecast = new List<ForecastDayResponse>();
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var now = DateTimeOffset.UtcNow;
-        var cardQuery = from card in db.ReviewCards
-            join ul in db.UserLexicalUnits on card.UserLexicalUnitId equals ul.Id
-            where ul.UserId == userId && card.SuspendedAt == null
-            select card;
-
-        if (deckId is { } deck)
-        {
-            var ids = db.DeckCards.Where(dc => dc.DeckId == deck).Select(dc => dc.UserLexicalUnitId);
-            cardQuery = cardQuery.Where(c => ids.Contains(c.UserLexicalUnitId));
-        }
-
-        var cards = await cardQuery.ToListAsync(ct);
-        var today = DateOnly.FromDateTime(now.UtcDateTime);
-        for (var i = 0; i < 14; i++)
-        {
-            var date = today.AddDays(i);
-            forecast.Add(new ForecastDayResponse(date, cards.Count(c => DateOnly.FromDateTime(c.DueAt.UtcDateTime) <= date)));
-        }
+        var forecast = await lexicon.BuildForecastAsync(userId, deckId, ForecastDays, DateTimeOffset.UtcNow, ct);
 
         return Ok(new PracticeSummaryResponse(
             summary.Reviewed, summary.Correct, summary.Again, summary.NewCardsSeen, summary.XpEarned,
-            summary.AccuracyPercent, summary.RemainingDue, forecast));
+            summary.AccuracyPercent, summary.RemainingDue, ToForecast(forecast)));
     }
 
     /// <summary>
@@ -150,19 +106,8 @@ public sealed class PracticeController(
     public async Task<IActionResult> Suspend(Guid reviewCardId, [FromQuery] bool suspended = true, CancellationToken ct = default)
     {
         var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var card = await db.ReviewCards
-            .FirstOrDefaultAsync(c => c.Id == reviewCardId && c.UserLexicalUnit!.UserId == userId, ct);
-
-        if (card is null)
-        {
-            return NotFound();
-        }
-
-        card.SuspendedAt = suspended ? DateTimeOffset.UtcNow : null;
-        card.UserLexicalUnit!.Suspended = suspended;
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        var updated = await lexicon.SetCardSuspensionAsync(userId, reviewCardId, suspended, DateTimeOffset.UtcNow, ct);
+        return updated ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -175,15 +120,16 @@ public sealed class PracticeController(
     public async Task<IActionResult> Prefetch([FromQuery] int limit = 200, CancellationToken ct = default)
     {
         var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var ids = await db.UserLexicalUnits
-            .Where(u => u.UserId == userId)
-            .OrderByDescending(u => u.AddedAt)
-            .Select(u => u.LexicalUnitId)
-            .Take(Math.Clamp(limit, 1, 1000))
-            .ToListAsync(ct);
+        var ids = await lexicon.GetRecentUnitIdsAsync(userId, Math.Clamp(limit, 1, 1000), ct);
 
         await embeddings.EnsureEmbeddingsAsync(ids, null, ct);
         return Ok(new { requested = ids.Count });
     }
+
+    /// <summary>Горизонт прогноза повторений: столько дней вперёд показывается пользователю.</summary>
+    private const int ForecastDays = 14;
+
+    /// <summary>Преобразует подсчитанный прогноз в форму, которую ожидает клиент.</summary>
+    private static ForecastDayResponse[] ToForecast(IReadOnlyList<ForecastDayCount> forecast) =>
+        forecast.Select(f => new ForecastDayResponse(f.Date, f.Cards)).ToArray();
 }

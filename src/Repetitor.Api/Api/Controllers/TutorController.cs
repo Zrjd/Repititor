@@ -1,11 +1,9 @@
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Repetitor.Api.Api.Dto;
-using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -14,7 +12,8 @@ namespace Repetitor.Api.Api.Controllers;
 [Route("api/v1/tutor")]
 [Authorize]
 public sealed class TutorController(
-    IDbContextFactory<AppDbContext> dbFactory,
+    IChatDbService chat,
+    IAiDbService ai,
     ITutorChatService tutor,
     IClock clock) : ControllerBase
 {
@@ -28,16 +27,7 @@ public sealed class TutorController(
     [ProducesResponseType(typeof(ChatSessionResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ChatSessionResponse[]>> Sessions([FromQuery] bool includeArchived = false, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var sessions = await db.ChatSessions
-            .Include(s => s.Messages)
-            .Where(s => s.UserId == userId && (includeArchived || !s.IsArchived))
-            .OrderByDescending(s => s.LastMessageAt)
-            .Take(100)
-            .ToListAsync(ct);
-
+        var sessions = await chat.GetSessionsAsync(CurrentUserAccessor.GetUserId(User), includeArchived, ct);
         return Ok(sessions.Select(s => s.ToResponse()).ToArray());
     }
 
@@ -56,8 +46,7 @@ public sealed class TutorController(
             userId, request.Mode, request.Level, request.Scenario, request.Title,
             request.Provider, request.Model, request.UseDictionary, ct);
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var loaded = await db.ChatSessions.Include(s => s.Messages).FirstAsync(s => s.Id == session.Id, ct);
+        var loaded = await chat.LoadSessionAsync(session.Id, ct);
         return StatusCode(StatusCodes.Status201Created, loaded.ToResponse());
     }
 
@@ -71,12 +60,7 @@ public sealed class TutorController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ChatSessionResponse>> Session(Guid sessionId, CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var session = await db.ChatSessions
-            .Include(s => s.Messages)
-            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
-
+        var session = await chat.GetSessionAsync(CurrentUserAccessor.GetUserId(User), sessionId, ct);
         return session is null ? NotFound() : Ok(session.ToResponse());
     }
 
@@ -90,27 +74,13 @@ public sealed class TutorController(
     [ProducesResponseType(typeof(ChatMessageResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ChatMessageResponse[]>> Messages(Guid sessionId, [FromQuery] DateTimeOffset? before, [FromQuery] int limit = 200, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var exists = await db.ChatSessions.AnyAsync(s => s.Id == sessionId && s.UserId == userId, ct);
-        if (!exists)
+        if (!await chat.SessionExistsAsync(CurrentUserAccessor.GetUserId(User), sessionId, ct))
         {
             return NotFound();
         }
 
-        var query = db.ChatMessages.Where(m => m.SessionId == sessionId);
-        if (before is { } b)
-        {
-            query = query.Where(m => m.CreatedAt < b);
-        }
-
-        var messages = await query
-            .OrderByDescending(m => m.CreatedAt)
-            .Take(Math.Clamp(limit, 1, 500))
-            .ToListAsync(ct);
-
-        return Ok(messages.OrderBy(m => m.CreatedAt).Select(m => m.ToResponse()).ToArray());
+        var messages = await chat.GetMessagesAsync(sessionId, before, Math.Clamp(limit, 1, 500), ct);
+        return Ok(messages.Select(m => m.ToResponse()).ToArray());
     }
 
     /// <summary>
@@ -200,8 +170,7 @@ public sealed class TutorController(
         var userId = CurrentUserAccessor.GetUserId(User);
         await tutor.RenameAsync(userId, sessionId, request.Title, ct);
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var session = await db.ChatSessions.Include(s => s.Messages).FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
+        var session = await chat.GetSessionAsync(userId, sessionId, ct);
         return session is null ? NotFound() : Ok(session.ToResponse());
     }
 
@@ -214,17 +183,8 @@ public sealed class TutorController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Archive(Guid sessionId, [FromQuery] bool archived = true, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var session = await db.ChatSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
-        if (session is null)
-        {
-            return NotFound();
-        }
-
-        session.IsArchived = archived;
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        var updated = await chat.SetArchivedAsync(CurrentUserAccessor.GetUserId(User), sessionId, archived, ct);
+        return updated ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -236,17 +196,8 @@ public sealed class TutorController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteSession(Guid sessionId, CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var session = await db.ChatSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
-        if (session is null)
-        {
-            return NotFound();
-        }
-
-        db.ChatSessions.Remove(session);
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        var deleted = await chat.DeleteSessionAsync(CurrentUserAccessor.GetUserId(User), sessionId, ct);
+        return deleted ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -258,19 +209,8 @@ public sealed class TutorController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Feedback(Guid messageId, FeedbackRequest request, CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var message = await db.ChatMessages
-            .FirstOrDefaultAsync(m => m.Id == messageId && m.Session!.UserId == userId, ct);
-
-        if (message is null)
-        {
-            return NotFound();
-        }
-
-        message.FeedbackRating = request.Rating;
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        var saved = await chat.SetMessageFeedbackAsync(CurrentUserAccessor.GetUserId(User), messageId, request.Rating, ct);
+        return saved ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -283,32 +223,16 @@ public sealed class TutorController(
     [ProducesResponseType(typeof(AiUsageResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiUsageResponse>> Usage([FromQuery] int days = 30, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        var from = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime).AddDays(-Math.Clamp(days, 1, 365) + 1);
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var logs = await db.AiCallLogs
-            .Where(l => l.UserId == userId && l.CreatedAt >= from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))
-            .ToListAsync(ct);
-
-        var byProvider = logs
-            .GroupBy(l => l.Provider)
-            .Select(g => new AiUsageByProviderResponse(
-                g.Key, g.Count(), g.Sum(x => x.InputTokens), g.Sum(x => x.OutputTokens),
-                Math.Round(g.Sum(x => x.EstimatedCostUsd), 6)))
-            .ToArray();
-
-        var byDay = logs
-            .GroupBy(l => DateOnly.FromDateTime(l.CreatedAt.UtcDateTime))
-            .OrderBy(g => g.Key)
-            .Select(g => new AiUsageByDayResponse(g.Key, g.Count(), g.Sum(x => x.InputTokens), g.Sum(x => x.OutputTokens)))
-            .ToArray();
+        var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        var report = await ai.GetUsageReportAsync(CurrentUserAccessor.GetUserId(User), today.AddDays(-Math.Clamp(days, 1, 365) + 1), today, ct);
 
         return Ok(new AiUsageResponse(
-            from, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime),
-            logs.Count, logs.Count(l => !l.Success),
-            logs.Sum(l => l.InputTokens), logs.Sum(l => l.OutputTokens),
-            Math.Round(logs.Sum(l => l.EstimatedCostUsd), 6), byProvider, byDay));
+            report.From, report.To,
+            report.TotalCalls, report.FailedCalls,
+            report.InputTokens, report.OutputTokens, report.EstimatedCostUsd,
+            report.ByProvider.Select(p => new AiUsageByProviderResponse(
+                p.Provider, p.Calls, p.InputTokens, p.OutputTokens, p.EstimatedCostUsd)).ToArray(),
+            report.ByDay.Select(d => new AiUsageByDayResponse(d.Date, d.Calls, d.InputTokens, d.OutputTokens)).ToArray()));
     }
 
     private async Task WriteSseAsync(string eventName, string data, CancellationToken ct)

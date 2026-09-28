@@ -1,14 +1,13 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Configuration;
 using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Ai;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -17,7 +16,7 @@ namespace Repetitor.Api.Api.Controllers;
 [Route("api/v1/ai")]
 public sealed class AiController(
     IAiGateway gateway,
-    IDbContextFactory<AppDbContext> dbFactory,
+    IAiDbService aiDb,
     IEmbeddingService embeddings,
     IClock clock,
     IOptions<AiOptions> aiOptions,
@@ -95,36 +94,21 @@ public sealed class AiController(
     [ProducesResponseType(typeof(AiUsageResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiUsageResponse>> Usage([FromQuery] int days = 30, [FromQuery] bool allUsers = false, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
         var isAdmin = User.IsInRole("Admin") || User.IsInRole("Teacher");
-        var from = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime).AddDays(-Math.Clamp(days, 1, 365) + 1);
+        var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        var from = today.AddDays(-Math.Clamp(days, 1, 365) + 1);
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var query = db.AiCallLogs.Where(l => l.CreatedAt >= from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-        if (!allUsers || !isAdmin)
-        {
-            query = query.Where(l => l.UserId == userId);
-        }
-
-        var logs = await query.ToListAsync(ct);
-
-        var byProvider = logs
-            .GroupBy(l => l.Provider)
-            .Select(g => new AiUsageByProviderResponse(g.Key, g.Count(), g.Sum(x => x.InputTokens),
-                g.Sum(x => x.OutputTokens), Math.Round(g.Sum(x => x.EstimatedCostUsd), 6)))
-            .ToArray();
-
-        var byDay = logs
-            .GroupBy(l => DateOnly.FromDateTime(l.CreatedAt.UtcDateTime))
-            .OrderBy(g => g.Key)
-            .Select(g => new AiUsageByDayResponse(g.Key, g.Count(), g.Sum(x => x.InputTokens), g.Sum(x => x.OutputTokens)))
-            .ToArray();
+        // Статистику по всем пользователям видят только администраторы и преподаватели.
+        var report = await aiDb.GetUsageReportAsync(
+            allUsers && isAdmin ? null : CurrentUserAccessor.GetUserId(User), from, today, ct);
 
         return Ok(new AiUsageResponse(
-            from, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime),
-            logs.Count, logs.Count(l => !l.Success),
-            logs.Sum(l => l.InputTokens), logs.Sum(l => l.OutputTokens),
-            Math.Round(logs.Sum(l => l.EstimatedCostUsd), 6), byProvider, byDay));
+            report.From, report.To,
+            report.TotalCalls, report.FailedCalls,
+            report.InputTokens, report.OutputTokens, report.EstimatedCostUsd,
+            report.ByProvider.Select(p => new AiUsageByProviderResponse(
+                p.Provider, p.Calls, p.InputTokens, p.OutputTokens, p.EstimatedCostUsd)).ToArray(),
+            report.ByDay.Select(d => new AiUsageByDayResponse(d.Date, d.Calls, d.InputTokens, d.OutputTokens)).ToArray()));
     }
 
     /// <summary>
@@ -175,7 +159,8 @@ public sealed class AiController(
 [Route("api/v1/admin")]
 [Authorize(Roles = "Admin,Teacher")]
 public sealed class AdminController(
-    IDbContextFactory<AppDbContext> dbFactory,
+    IAdminDbService admin,
+    IAiDbService aiDb,
     IClock clock) : ControllerBase
 {
     /// <summary>
@@ -192,26 +177,25 @@ public sealed class AdminController(
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> Stats(CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var since = clock.UtcNow.AddDays(-7);
+        var stats = await admin.GetPlatformStatsAsync(clock.UtcNow.AddDays(-7), ct);
 
         return Ok(new
         {
-            users = await db.Users.CountAsync(ct),
-            activeUsers7d = await db.Users.CountAsync(u => u.LastLoginAt >= since, ct),
-            languages = await db.Languages.CountAsync(ct),
-            courses = await db.Courses.CountAsync(ct),
-            lessons = await db.Lessons.CountAsync(ct),
-            words = await db.LexicalUnits.CountAsync(u => u.Status != ContentStatus.Deprecated, ct),
-            wordsWithEmbeddings = await db.LexicalUnitEmbeddings.CountAsync(ct),
-            decks = await db.Decks.CountAsync(ct),
-            reviewCards = await db.ReviewCards.CountAsync(ct),
-            reviews7d = await db.ReviewLogs.CountAsync(r => r.ReviewedAt >= since, ct),
-            exercises = await db.Exercises.CountAsync(ct),
-            attempts7d = await db.ExerciseAttempts.CountAsync(a => a.CompletedAt >= since, ct),
-            chatSessions = await db.ChatSessions.CountAsync(ct),
-            aiCalls7d = await db.AiCallLogs.CountAsync(l => l.CreatedAt >= since, ct),
-            aiCost7dUsd = Math.Round(await db.AiCallLogs.Where(l => l.CreatedAt >= since).SumAsync(l => l.EstimatedCostUsd, ct), 6)
+            users = stats.Users,
+            activeUsers7d = stats.ActiveUsers7d,
+            languages = stats.Languages,
+            courses = stats.Courses,
+            lessons = stats.Lessons,
+            words = stats.Words,
+            wordsWithEmbeddings = stats.WordsWithEmbeddings,
+            decks = stats.Decks,
+            reviewCards = stats.ReviewCards,
+            reviews7d = stats.Reviews7d,
+            exercises = stats.Exercises,
+            attempts7d = stats.Attempts7d,
+            chatSessions = stats.ChatSessions,
+            aiCalls7d = stats.AiCalls7d,
+            aiCost7dUsd = stats.AiCost7dUsd
         });
     }
 
@@ -229,29 +213,17 @@ public sealed class AdminController(
     [ProducesResponseType(typeof(PagedResponse<object>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<object>>> Users([FromQuery] PagedRequest request, [FromQuery] string? query, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var q = db.Users.AsNoTracking();
+        var result = await admin.GetUsersAsync(query, Math.Max(request.Page, 1), request.PageSize, ct);
 
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            var normalized = TextNormalizer.Normalize(query);
-            q = q.Where(u => u.Email.Contains(normalized) || u.DisplayName.ToLower().Contains(normalized));
-        }
-
-        var total = await q.CountAsync(ct);
-        var page = Math.Max(request.Page, 1);
-        var rows = await q
-            .OrderByDescending(u => u.CreatedAt)
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(u => new
-            {
-                u.Id, u.Email, u.DisplayName, Role = u.Role.ToString(), Level = u.Level.ToString(),
-                u.TotalXp, u.CurrentStreak, u.IsActive, u.EmailConfirmed, u.CreatedAt, u.LastLoginAt
-            })
-            .ToListAsync(ct);
-
-        return Ok(new PagedResponse<object>(rows.Cast<object>().ToArray(), page, request.PageSize, total));
+        return Ok(new PagedResponse<object>(
+            result.Items
+                .Select(u => (object)new
+                {
+                    u.Id, u.Email, u.DisplayName, u.Role, u.Level,
+                    u.TotalXp, u.CurrentStreak, u.IsActive, u.EmailConfirmed, u.CreatedAt, u.LastLoginAt
+                })
+                .ToArray(),
+            result.Page, result.PageSize, result.Total));
     }
 
     /// <summary>
@@ -266,16 +238,7 @@ public sealed class AdminController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetRole(Guid id, [FromQuery] UserRole role, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
-        if (user is null)
-        {
-            return NotFound();
-        }
-
-        user.Role = role;
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        return await admin.SetUserRoleAsync(id, role, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -292,16 +255,7 @@ public sealed class AdminController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetActive(Guid id, [FromQuery] bool active = true, CancellationToken ct = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
-        if (user is null)
-        {
-            return NotFound();
-        }
-
-        user.IsActive = active;
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        return await admin.SetUserActiveAsync(id, active, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -319,8 +273,7 @@ public sealed class AdminController(
     public async Task<IActionResult> PurgeAiLogs([FromQuery] int olderThanDays = 30, CancellationToken ct = default)
     {
         var cutoff = clock.UtcNow.AddDays(-Math.Abs(olderThanDays));
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        await db.AiCallLogs.Where(l => l.CreatedAt < cutoff).ExecuteDeleteAsync(ct);
+        await aiDb.PurgeLogsAsync(cutoff, ct);
         return NoContent();
     }
 }

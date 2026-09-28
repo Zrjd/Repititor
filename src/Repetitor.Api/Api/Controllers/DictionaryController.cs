@@ -2,14 +2,13 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Configuration;
 using Repetitor.Api.Domain.Entities;
 using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -18,7 +17,9 @@ namespace Repetitor.Api.Api.Controllers;
 [Route("api/v1/dictionary")]
 [Authorize]
 public sealed class DictionaryController(
-    IDbContextFactory<AppDbContext> dbFactory,
+    ILexiconDbService lexicon,
+    ICatalogDbService catalog,
+    IUserDbService users,
     IVectorSearchService vectorSearch,
     IEmbeddingService embeddings,
     IClock clock,
@@ -35,7 +36,7 @@ public sealed class DictionaryController(
     [ProducesResponseType(typeof(PagedResponse<LexicalUnitResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<LexicalUnitResponse>>> Search([FromQuery] SearchWordsRequest request, CancellationToken ct)
     {
-        var user = await LoadUserAsync(ct);
+        var user = await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
         if (user is null)
         {
             return Unauthorized();
@@ -46,6 +47,7 @@ public sealed class DictionaryController(
 
         if (!string.IsNullOrWhiteSpace(request.Query) && request.Semantic)
         {
+            // Семантический поиск сам выбирает порядок выдачи, поэтому пагинация применяется к числу кандидатов.
             var matches = await vectorSearch.SearchAsync(
                 request.Query!, languageId, translationLanguageId, request.Provider,
                 Math.Clamp(request.Limit * Math.Max(request.Page, 1), 1, 200),
@@ -53,8 +55,7 @@ public sealed class DictionaryController(
                 request.MaxMinLevel is { } ml ? new CefrFilter(ml) : null,
                 ct: ct);
 
-            var ids = matches.Select(m => m.LexicalUnitId).ToArray();
-            var units = await dbFactory.LoadLexicalUnitsAsync(ids, ct);
+            var units = await lexicon.LoadUnitsAsync(matches.Select(m => m.LexicalUnitId).ToArray(), ct);
             var byId = units.ToDictionary(u => u.Id);
             var similarityById = matches.ToDictionary(m => m.LexicalUnitId, m => m.Similarity);
 
@@ -66,46 +67,19 @@ public sealed class DictionaryController(
             return Ok(new PagedResponse<LexicalUnitResponse>(items, request.Page, request.Limit, items.Length));
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var query = db.LexicalUnits
-            .Where(u => u.LanguageId == languageId && u.TranslationLanguageId == translationLanguageId)
-            .Where(u => u.Status != ContentStatus.Deprecated);
-
-        if (!string.IsNullOrWhiteSpace(request.Query))
-        {
-            var q = TextNormalizer.Normalize(request.Query!);
-            var prefix = q.Length > 0 ? q[..Math.Min(q.Length, 3)] : q;
-            query = query.Where(u =>
-                EF.Functions.ILike(u.NormalizedText, prefix + "%") ||
-                (u.Translation != null && EF.Functions.ILike(u.Translation, "%" + q + "%")));
-        }
-
-        if (request.MaxMinLevel is { } maxLevel)
-        {
-            query = query.Where(u => u.MinLearnerLevel <= maxLevel);
-        }
-
-        if (request.PartOfSpeech is { } pos)
-        {
-            query = query.Where(u => u.PartOfSpeech == pos);
-        }
-
-        if (request.Tags is { Length: > 0 } tags)
-        {
-            query = query.Where(u => u.Tags != null && tags.All(t => u.Tags!.Contains(t)));
-        }
-
-        var total = await query.CountAsync(ct);
-        var page = Math.Max(request.Page, 1);
-        var rows = await query
-            .OrderBy(u => u.FrequencyRank == 0 ? int.MaxValue : u.FrequencyRank)
-            .ThenBy(u => u.Text)
-            .Skip((page - 1) * request.Limit)
-            .Take(request.Limit)
-            .ToListAsync(ct);
+        var result = await lexicon.SearchUnitsAsync(
+            languageId,
+            translationLanguageId,
+            request.Query,
+            request.MaxMinLevel,
+            request.PartOfSpeech,
+            request.Tags,
+            request.Page,
+            request.Limit,
+            ct);
 
         return Ok(new PagedResponse<LexicalUnitResponse>(
-            rows.Select(r => r.ToResponse()).ToArray(), page, request.Limit, total));
+            result.Items.Select(r => r.ToResponse()).ToArray(), result.Page, result.PageSize, result.Total));
     }
 
     /// <summary>
@@ -118,7 +92,7 @@ public sealed class DictionaryController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LexicalUnitResponse>> GetWord(Guid id, CancellationToken ct)
     {
-        var units = await dbFactory.LoadLexicalUnitsAsync([id], ct);
+        var units = await lexicon.LoadUnitsAsync([id], ct);
         var unit = units.FirstOrDefault();
         return unit is null ? NotFound() : Ok(unit.ToResponse());
     }
@@ -133,8 +107,7 @@ public sealed class DictionaryController(
     public async Task<ActionResult<LexicalUnitResponse[]>> SimilarWords(Guid id, [FromQuery] int limit = 10, [FromQuery] string? provider = null, CancellationToken ct = default)
     {
         var matches = await vectorSearch.SearchByIdsAsync([id], provider, Math.Clamp(limit, 1, 50), 0.35, ct);
-        var ids = matches.Select(m => m.LexicalUnitId).ToArray();
-        var units = await dbFactory.LoadLexicalUnitsAsync(ids, ct);
+        var units = await lexicon.LoadUnitsAsync(matches.Select(m => m.LexicalUnitId).ToArray(), ct);
         var byId = units.ToDictionary(u => u.Id);
         var similarity = matches.ToDictionary(m => m.LexicalUnitId, m => m.Similarity);
 
@@ -152,7 +125,7 @@ public sealed class DictionaryController(
     [ProducesResponseType(typeof(LexicalUnitResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<LexicalUnitResponse>> CreateWord(CreateLexicalUnitRequest request, CancellationToken ct)
     {
-        var user = await LoadUserAsync(ct);
+        var user = await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
         if (user is null)
         {
             return Unauthorized();
@@ -162,12 +135,7 @@ public sealed class DictionaryController(
         var translationLanguageId = request.TranslationLanguageId ?? user.InterfaceLanguageId;
         var normalized = TextNormalizer.Normalize(request.Text);
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var existing = await db.LexicalUnits.FirstOrDefaultAsync(
-            u => u.LanguageId == languageId
-                 && u.TranslationLanguageId == translationLanguageId
-                 && u.NormalizedText == normalized, ct);
-
+        var existing = await lexicon.FindDuplicateAsync(languageId, translationLanguageId, normalized, ct);
         if (existing is not null)
         {
             return Conflict(new ErrorResponse("duplicate_word",
@@ -199,16 +167,15 @@ public sealed class DictionaryController(
         };
         unit.ContentHash = TextNormalizer.ContentHash(unit.Text, unit.Translation, unit.ExampleTarget);
 
-        db.LexicalUnits.Add(unit);
-        await AttachToUserAsync(db, user.Id, unit, request.DeckId, ContentSource.UserCreated);
-        await db.SaveChangesAsync(ct);
+        await lexicon.CreateUnitAsync(unit, user.Id, request.DeckId, ContentSource.UserCreated, ct);
 
         if (request.ComputeEmbedding)
         {
             await TryEmbedAsync([unit.Id], ct);
         }
 
-        unit = (await dbFactory.LoadLexicalUnitsAsync([unit.Id], ct)).First();
+        // Перечитываем слово, чтобы в ответ попали данные, сохранённые базой.
+        unit = (await lexicon.LoadUnitsAsync([unit.Id], ct)).First();
         return CreatedAtAction(nameof(GetWord), new { id = unit.Id }, unit.ToResponse());
     }
 
@@ -222,37 +189,30 @@ public sealed class DictionaryController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LexicalUnitResponse>> UpdateWord(Guid id, UpdateLexicalUnitRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var unit = await db.LexicalUnits.FirstOrDefaultAsync(u => u.Id == id, ct);
+        var unit = await lexicon.UpdateUnitAsync(
+            id,
+            request.Text,
+            request.Transcription,
+            request.Translation,
+            request.AlternativeTranslations,
+            request.PartOfSpeech,
+            request.Gender,
+            request.PluralForm,
+            request.PastTense,
+            request.AudioUrl,
+            request.ExampleTarget,
+            request.ExampleNative,
+            request.Notes,
+            request.Tags,
+            request.MinLearnerLevel,
+            request.FrequencyRank,
+            request.Status,
+            ct);
+
         if (unit is null)
         {
             return NotFound();
         }
-
-        if (request.Text is not null)
-        {
-            unit.Text = TextNormalizer.Collapse(request.Text);
-            unit.NormalizedText = TextNormalizer.Normalize(request.Text);
-        }
-
-        if (request.Transcription is not null) unit.Transcription = request.Transcription;
-        if (request.Translation is not null) unit.Translation = request.Translation;
-        if (request.AlternativeTranslations is not null) unit.AlternativeTranslations = request.AlternativeTranslations;
-        if (request.PartOfSpeech is { } pos) unit.PartOfSpeech = pos;
-        if (request.Gender is not null) unit.Gender = request.Gender;
-        if (request.PluralForm is not null) unit.PluralForm = request.PluralForm;
-        if (request.PastTense is not null) unit.PastTense = request.PastTense;
-        if (request.AudioUrl is not null) unit.AudioUrl = request.AudioUrl;
-        if (request.ExampleTarget is not null) unit.ExampleTarget = request.ExampleTarget;
-        if (request.ExampleNative is not null) unit.ExampleNative = request.ExampleNative;
-        if (request.Notes is not null) unit.Notes = request.Notes;
-        if (request.Tags is not null) unit.Tags = request.Tags;
-        if (request.MinLearnerLevel is { } lvl) unit.MinLearnerLevel = lvl;
-        if (request.FrequencyRank is { } rank) unit.FrequencyRank = rank;
-        if (request.Status is { } status) unit.Status = status;
-
-        unit.ContentHash = TextNormalizer.ContentHash(unit.Text, unit.Translation, unit.ExampleTarget);
-        await db.SaveChangesAsync(ct);
 
         if (request.ComputeEmbedding != false)
         {
@@ -272,14 +232,13 @@ public sealed class DictionaryController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteWord(Guid id, CancellationToken ct)
     {
-        var user = await LoadUserAsync(ct);
+        var user = await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
         if (user is null)
         {
             return Unauthorized();
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var unit = await db.LexicalUnits.FirstOrDefaultAsync(u => u.Id == id, ct);
+        var unit = await lexicon.FindUnitAsync(id, ct);
         if (unit is null)
         {
             return NotFound();
@@ -291,8 +250,7 @@ public sealed class DictionaryController(
             return Forbid();
         }
 
-        unit.Status = ContentStatus.Deprecated;
-        await db.SaveChangesAsync(ct);
+        await lexicon.DeprecateUnitAsync(id, ct);
         return NoContent();
     }
 
@@ -305,122 +263,33 @@ public sealed class DictionaryController(
     [ProducesResponseType(typeof(ImportWordsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ImportWordsResponse>> Import(ImportWordsRequest request, CancellationToken ct)
     {
-        var user = await LoadUserAsync(ct);
+        var user = await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
         if (user is null)
         {
             return Unauthorized();
         }
 
-        var languageId = request.LanguageId ?? user.TargetLanguageId;
-        var translationLanguageId = request.TranslationLanguageId ?? user.InterfaceLanguageId;
-        var delimiter = string.IsNullOrEmpty(request.Delimiter) ? "\t" : request.Delimiter;
-        var errors = new List<string>();
-        int imported = 0, updated = 0, skipped = 0, failed = 0;
+        var result = await lexicon.ImportUnitsAsync(
+            new WordImportRequest(
+                user.Id,
+                request.LanguageId ?? user.TargetLanguageId,
+                request.TranslationLanguageId ?? user.InterfaceLanguageId,
+                request.Text,
+                string.IsNullOrEmpty(request.Delimiter) ? "\t" : request.Delimiter,
+                request.HasHeader,
+                request.SkipDuplicates,
+                request.MinLearnerLevel,
+                request.DefaultTags,
+                request.DeckId,
+                _learning.MaxWordsPerImport),
+            ct);
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lines = request.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var payload = new List<LexicalUnit>();
-
-        for (var i = 0; i < lines.Length; i++)
+        if (request.ComputeEmbeddings)
         {
-            if (payload.Count >= _learning.MaxWordsPerImport)
-            {
-                errors.Add($"Импорт остановлен: достигнут лимит {_learning.MaxWordsPerImport} слов.");
-                break;
-            }
-
-            var line = lines[i].TrimEnd('\r');
-            if (request.HasHeader && i == 0)
-            {
-                continue;
-            }
-
-            var columns = line.Split(delimiter);
-            var text = columns[0].Trim();
-            if (text.Length == 0)
-            {
-                continue;
-            }
-
-            var normalized = TextNormalizer.Normalize(text);
-            try
-            {
-                var existing = await db.LexicalUnits.FirstOrDefaultAsync(
-                    u => u.LanguageId == languageId && u.TranslationLanguageId == translationLanguageId
-                         && u.NormalizedText == normalized, ct);
-
-                if (existing is not null)
-                {
-                    if (existing.Status == ContentStatus.Deprecated)
-                    {
-                        existing.Status = ContentStatus.Verified;
-                        existing.Translation = columns.Length > 1 ? columns[1].Trim() : existing.Translation;
-                        existing.ContentHash = TextNormalizer.ContentHash(existing.Text, existing.Translation, existing.ExampleTarget);
-                        payload.Add(existing);
-                        updated++;
-                    }
-                    else if (!request.SkipDuplicates)
-                    {
-                        if (columns.Length > 1 && !string.IsNullOrWhiteSpace(columns[1]))
-                        {
-                            existing.Translation = columns[1].Trim();
-                            existing.ContentHash = TextNormalizer.ContentHash(existing.Text, existing.Translation, existing.ExampleTarget);
-                            updated++;
-                        }
-                        else
-                        {
-                            skipped++;
-                        }
-                    }
-                    else
-                    {
-                        skipped++;
-                    }
-
-                    continue;
-                }
-
-                var unit = new LexicalUnit
-                {
-                    LanguageId = languageId,
-                    TranslationLanguageId = translationLanguageId,
-                    Text = TextNormalizer.Collapse(text),
-                    NormalizedText = normalized,
-                    Translation = columns.Length > 1 ? columns[1].Trim() : null,
-                    Transcription = columns.Length > 2 ? columns[2].Trim() : null,
-                    ExampleTarget = columns.Length > 3 ? columns[3].Trim() : null,
-                    MinLearnerLevel = request.MinLearnerLevel,
-                    Tags = request.DefaultTags,
-                    Status = ContentStatus.Verified,
-                    AuthorUserId = user.Id
-                };
-                unit.ContentHash = TextNormalizer.ContentHash(unit.Text, unit.Translation, unit.ExampleTarget);
-                db.LexicalUnits.Add(unit);
-                payload.Add(unit);
-                imported++;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                failed++;
-                errors.Add($"Строка {i + 1}: {ex.Message}");
-            }
+            await TryEmbedAsync(result.CreatedUnitIds, ct);
         }
 
-        await db.SaveChangesAsync(ct);
-
-        foreach (var unit in payload)
-        {
-            await AttachToUserAsync(db, user.Id, unit, request.DeckId, ContentSource.Imported);
-        }
-
-        await db.SaveChangesAsync(ct);
-
-        if (request.ComputeEmbeddings && payload.Count > 0)
-        {
-            await TryEmbedAsync(payload.Select(p => p.Id).ToArray(), ct);
-        }
-
-        return Ok(new ImportWordsResponse(imported, updated, skipped, failed, errors.Take(20).ToArray()));
+        return Ok(new ImportWordsResponse(result.Imported, result.Updated, result.Skipped, result.Failed, result.Errors.ToArray()));
     }
 
     /// <summary>
@@ -432,34 +301,11 @@ public sealed class DictionaryController(
     [ProducesResponseType(typeof(PagedResponse<UserWordResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<UserWordResponse>>> MyWords([FromQuery] PagedRequest request, [FromQuery] CardState? state, [FromQuery] Guid? deckId, CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var result = await lexicon.GetUserUnitsAsync(
+            CurrentUserAccessor.GetUserId(User), state, deckId, request.Page, request.PageSize, ct);
 
-        var query = db.UserLexicalUnits
-            .Include(u => u.LexicalUnit)
-            .Where(u => u.UserId == userId);
-
-        if (state is { } s)
-        {
-            query = query.Where(u => u.State == s);
-        }
-
-        if (deckId is { } did)
-        {
-            var ids = db.DeckCards.Where(dc => dc.DeckId == did).Select(dc => dc.UserLexicalUnitId);
-            query = query.Where(u => ids.Contains(u.Id));
-        }
-
-        var total = await query.CountAsync(ct);
-        var page = Math.Max(request.Page, 1);
-        var rows = await query
-            .OrderBy(u => u.State)
-            .ThenByDescending(u => u.AddedAt)
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(ct);
-
-        return Ok(new PagedResponse<UserWordResponse>(rows.Select(r => r.ToResponse()).ToArray(), page, request.PageSize, total));
+        return Ok(new PagedResponse<UserWordResponse>(
+            result.Items.Select(r => r.ToResponse()).ToArray(), result.Page, result.PageSize, result.Total));
     }
 
     /// <summary>
@@ -471,20 +317,10 @@ public sealed class DictionaryController(
     [ProducesResponseType(typeof(UserWordResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<UserWordResponse>> AddMyWord(Guid lexicalUnitId, [FromQuery] Guid? deckId, [FromQuery] string? note, [FromQuery] ContentSource source = ContentSource.UserCreated, CancellationToken ct = default)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var unit = await db.LexicalUnits.FirstOrDefaultAsync(u => u.Id == lexicalUnitId, ct);
-        if (unit is null)
-        {
-            return NotFound();
-        }
-
-        var entry = await AttachToUserAsync(db, userId, unit, deckId, source);
-        entry.PersonalNote = note;
-        await db.SaveChangesAsync(ct);
-
-        await db.Entry(entry).Reference(u => u.LexicalUnit).LoadAsync(ct);
-        return StatusCode(StatusCodes.Status201Created, entry.ToResponse());
+        var entry = await lexicon.AddUserUnitAsync(CurrentUserAccessor.GetUserId(User), lexicalUnitId, deckId, source, note, ct);
+        return entry is null
+            ? NotFound()
+            : StatusCode(StatusCodes.Status201Created, entry.ToResponse());
     }
 
     /// <summary>
@@ -496,19 +332,8 @@ public sealed class DictionaryController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> RemoveMyWord(Guid lexicalUnitId, CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var entry = await db.UserLexicalUnits
-            .FirstOrDefaultAsync(u => u.UserId == userId && u.LexicalUnitId == lexicalUnitId, ct);
-
-        if (entry is null)
-        {
-            return NotFound();
-        }
-
-        db.UserLexicalUnits.Remove(entry);
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        var removed = await lexicon.RemoveUserUnitAsync(CurrentUserAccessor.GetUserId(User), lexicalUnitId, ct);
+        return removed ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -520,25 +345,17 @@ public sealed class DictionaryController(
     [ProducesResponseType(typeof(WordOfTheDayResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<WordOfTheDayResponse>> WordOfTheDay(CancellationToken ct)
     {
-        var user = await LoadUserAsync(ct);
+        var user = await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
         if (user is null)
         {
             return Unauthorized();
         }
 
-        var now = clock.UtcNow;
-        var start = now.Date;
+        var start = clock.UtcNow.Date;
         var seed = (int)(new DateTimeOffset(DateTime.SpecifyKind(start, DateTimeKind.Utc)).ToUnixTimeSeconds() / 86400) + user.Id.GetHashCode();
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var pool = await db.LexicalUnits
-            .Where(u => u.LanguageId == user.TargetLanguageId
-                        && u.TranslationLanguageId == user.InterfaceLanguageId
-                        && u.Status != ContentStatus.Deprecated
-                        && u.MinLearnerLevel <= user.Level)
-            .OrderBy(u => u.FrequencyRank)
-            .Take(200)
-            .ToListAsync(ct);
+        var pool = await lexicon.GetWordPoolAsync(
+            user.TargetLanguageId, user.InterfaceLanguageId, user.Level, WordOfTheDayPoolSize, ct);
 
         if (pool.Count == 0)
         {
@@ -555,42 +372,43 @@ public sealed class DictionaryController(
     /// Можно выбрать голос синтеза через параметр voice.
     /// </summary>
     [HttpPost("audio/word/{lexicalUnitId}")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GenerateWordAudio(Guid lexicalUnitId, [FromQuery] string? voice, CancellationToken ct)
     {
-        var user = await LoadUserAsync(ct);
+        var user = await users.FindAsync(CurrentUserAccessor.GetUserId(User), ct);
         if (user is null)
         {
             return Unauthorized();
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var unit = await db.LexicalUnits.FirstOrDefaultAsync(u => u.Id == lexicalUnitId, ct);
+        var unit = await lexicon.FindUnitAsync(lexicalUnitId, ct);
         if (unit is null)
         {
             return NotFound();
         }
 
-        var speech = HttpContext.RequestServices.GetRequiredService<ISpeechService>();
-        var language = await db.Languages.AsNoTracking().FirstAsync(l => l.Id == unit.LanguageId, ct);
-        var stored = await speech.SynthesizeAsync(unit.Text, language.Code, voice, user.SpeechRate, user.Id, ct);
+        var language = await catalog.FindLanguageAsync(unit.LanguageId, ct);
+        if (language is null)
+        {
+            return NotFound();
+        }
 
-        unit.AudioUrl = stored.Url;
-        await db.SaveChangesAsync(ct);
+        var speech = HttpContext.RequestServices.GetRequiredService<ISpeechService>();
+        var stored = await speech.SynthesizeAsync(unit.Text, language.Code, voice, user.SpeechRate, user.Id, ct);
+        await lexicon.SetUnitAudioUrlAsync(unit.Id, stored.Url, ct);
 
         return Ok(new { audioUrl = stored.Url, mediaId = stored.Id });
     }
 
+    /// <summary>Размер пула, из которого выбирается слово дня.</summary>
+    private const int WordOfTheDayPoolSize = 200;
+
     private static bool IsAdmin(System.Security.Claims.ClaimsPrincipal principal) =>
         principal.IsInRole("Admin") || principal.IsInRole("Teacher");
 
-    private async Task<User?> LoadUserAsync(CancellationToken ct)
-    {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-    }
-
+    /// <summary>
+    /// Считает эмбеддинги «по возможности»: если ИИ-провайдер недоступен, слово всё равно остаётся в базе.
+    /// </summary>
     private async Task TryEmbedAsync(IReadOnlyList<Guid> ids, CancellationToken ct)
     {
         try
@@ -601,86 +419,5 @@ public sealed class DictionaryController(
         {
             // Embeddings are best-effort: the word is stored even if the AI provider is unavailable.
         }
-    }
-
-    internal static async Task<UserLexicalUnit> AttachToUserAsync(
-        AppDbContext db,
-        Guid userId,
-        LexicalUnit unit,
-        Guid? deckId,
-        ContentSource source)
-    {
-        var entry = await db.UserLexicalUnits
-            .FirstOrDefaultAsync(u => u.UserId == userId && u.LexicalUnitId == unit.Id);
-
-        if (entry is null)
-        {
-            entry = new UserLexicalUnit
-            {
-                UserId = userId,
-                LexicalUnitId = unit.Id,
-                State = CardState.New,
-                Source = source
-            };
-            db.UserLexicalUnits.Add(entry);
-        }
-        else
-        {
-            entry.State = CardState.New;
-            entry.Suspended = false;
-        }
-
-        var reviewCard = await db.ReviewCards.FirstOrDefaultAsync(r => r.UserLexicalUnitId == entry.Id);
-        if (reviewCard is null)
-        {
-            reviewCard = new ReviewCard { UserLexicalUnitId = entry.Id, DueAt = DateTimeOffset.UtcNow };
-            db.ReviewCards.Add(reviewCard);
-        }
-        else
-        {
-            reviewCard.SuspendedAt = null;
-            reviewCard.DueAt = DateTimeOffset.UtcNow;
-            reviewCard.State = CardState.New;
-        }
-
-        if (deckId is { } deck)
-        {
-            var deckEntity = await db.Decks.FirstOrDefaultAsync(d => d.Id == deck && d.UserId == userId);
-            if (deckEntity is not null)
-            {
-                entry.LastDeckId = deckEntity.Id;
-                var exists = await db.DeckCards.AnyAsync(dc => dc.DeckId == deckEntity.Id && dc.UserLexicalUnitId == entry.Id);
-                if (!exists)
-                {
-                    var position = await db.DeckCards.CountAsync(dc => dc.DeckId == deckEntity.Id);
-                    db.DeckCards.Add(new DeckCard
-                    {
-                        DeckId = deckEntity.Id,
-                        UserLexicalUnitId = entry.Id,
-                        Position = position
-                    });
-                }
-            }
-        }
-
-        await db.SaveChangesAsync();
-        return entry;
-    }
-}
-
-internal static class DbFactoryLexicalExtensions
-{
-    public static async Task<List<LexicalUnit>> LoadLexicalUnitsAsync(
-        this IDbContextFactory<AppDbContext> factory,
-        IReadOnlyCollection<Guid> ids,
-        CancellationToken ct)
-    {
-        if (ids.Count == 0)
-        {
-            return [];
-        }
-
-        await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.LexicalUnits.AsNoTracking().Where(u => ids.Contains(u.Id)).ToListAsync(ct);
     }
 }

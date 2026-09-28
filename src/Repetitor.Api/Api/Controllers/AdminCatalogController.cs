@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Configuration;
@@ -10,7 +9,7 @@ using Repetitor.Api.Domain.Entities;
 using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Ai;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Controllers;
@@ -19,7 +18,8 @@ namespace Repetitor.Api.Api.Controllers;
 [Route("api/v1/admin")]
 [Authorize(Roles = "Admin,Teacher")]
 public sealed class AdminCatalogController(
-    IDbContextFactory<AppDbContext> dbFactory,
+    ICatalogDbService catalog,
+    IAiDbService aiDb,
     IContentGenerationService contentGeneration,
     IAiGateway gateway,
     IOptions<AiOptions> aiOptions,
@@ -37,28 +37,8 @@ public sealed class AdminCatalogController(
     public async Task<ActionResult<AdminCourseResponse[]>> Courses(
         [FromQuery] Guid? languageId, [FromQuery] bool includeUnpublished = true, CancellationToken ct = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var query = db.Courses.Include(c => c.Language).AsNoTracking().AsQueryable();
-
-        if (languageId is { } lid)
-        {
-            query = query.Where(c => c.LanguageId == lid);
-        }
-
-        if (!includeUnpublished)
-        {
-            query = query.Where(c => c.IsPublished);
-        }
-
-        var courses = await query
-            .OrderBy(c => c.Language!.SortOrder)
-            .ThenBy(c => c.SortOrder)
-            .ToListAsync(ct);
-
-        return Ok(courses.Select(c => new AdminCourseResponse(
-            c.Id, c.Slug, c.Title, c.Description, c.Level.ToString(), c.LanguageId, c.Language!.Code,
-            c.CoverUrl, c.AccentColor, c.EstimatedMinutes, c.IsPublished, c.SortOrder,
-            c.Lessons.Count, c.CreatedAt)).ToArray());
+        var courses = await catalog.GetAdminCoursesAsync(languageId, includeUnpublished, ct);
+        return Ok(courses.Select(ToResponse).ToArray());
     }
 
     /// <summary>
@@ -70,8 +50,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminCourseResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<AdminCourseResponse>> CreateCourse(CreateCourseRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (!await db.Languages.AnyAsync(l => l.Id == request.LanguageId, ct))
+        if (!await catalog.LanguageExistsAsync(request.LanguageId, ct))
         {
             return BadRequest(new ErrorResponse("invalid_language", "Language not found"));
         }
@@ -90,10 +69,8 @@ public sealed class AdminCatalogController(
             SortOrder = request.SortOrder
         };
 
-        db.Courses.Add(course);
-        await db.SaveChangesAsync(ct);
-
-        return CreatedAtAction(nameof(GetCourse), new { id = course.Id }, ToResponse(course));
+        var created = await catalog.CreateCourseAsync(course, ct);
+        return CreatedAtAction(nameof(GetCourse), new { id = created.Id }, ToResponse(created));
     }
 
     /// <summary>
@@ -104,8 +81,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminCourseResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminCourseResponse>> GetCourse(Guid id, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var course = await db.Courses.Include(c => c.Language).FirstOrDefaultAsync(c => c.Id == id, ct);
+        var course = await catalog.GetAdminCourseAsync(id, ct);
         return course is null ? NotFound() : Ok(ToResponse(course));
     }
 
@@ -118,33 +94,21 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminCourseResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminCourseResponse>> UpdateCourse(Guid id, UpdateCourseRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var course = await db.Courses.Include(c => c.Language).FirstOrDefaultAsync(c => c.Id == id, ct);
-        if (course is null)
+        var result = await catalog.UpdateCourseAsync(
+            id,
+            new CourseUpdate(
+                request.Slug, request.Title, request.Description, request.Level, request.LanguageId,
+                request.CoverUrl, request.AccentColor, request.EstimatedMinutes, request.IsPublished, request.SortOrder),
+            ct);
+
+        if (result.InvalidLanguage)
         {
-            return NotFound();
+            return BadRequest(new ErrorResponse("invalid_language", "Language not found"));
         }
 
-        if (request.Slug is not null) course.Slug = request.Slug;
-        if (request.Title is not null) course.Title = request.Title;
-        if (request.Description is not null) course.Description = request.Description;
-        if (request.Level is { } level) course.Level = level;
-        if (request.LanguageId is { } languageId)
-        {
-            if (!await db.Languages.AnyAsync(l => l.Id == languageId, ct))
-            {
-                return BadRequest(new ErrorResponse("invalid_language", "Language not found"));
-            }
-            course.LanguageId = languageId;
-        }
-        if (request.CoverUrl is not null) course.CoverUrl = request.CoverUrl;
-        if (request.AccentColor is not null) course.AccentColor = request.AccentColor;
-        if (request.EstimatedMinutes is { } minutes) course.EstimatedMinutes = minutes;
-        if (request.IsPublished is { } published) course.IsPublished = published;
-        if (request.SortOrder is { } order) course.SortOrder = order;
-
-        await db.SaveChangesAsync(ct);
-        return Ok(ToResponse(course));
+        return result.NotFound
+            ? NotFound()
+            : Ok(ToResponse(result.Course!));
     }
 
     /// <summary>
@@ -155,16 +119,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteCourse(Guid id, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var course = await db.Courses.FirstOrDefaultAsync(c => c.Id == id, ct);
-        if (course is null)
-        {
-            return NotFound();
-        }
-
-        db.Courses.Remove(course);
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        return await catalog.DeleteCourseAsync(id, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -175,12 +130,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminLessonResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminLessonResponse[]>> Lessons(Guid id, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lessons = await db.Lessons
-            .Where(l => l.CourseId == id)
-            .OrderBy(l => l.SortOrder)
-            .ToListAsync(ct);
-
+        var lessons = await catalog.GetAdminCourseLessonsAsync(id, ct);
         return Ok(lessons.Select(ToResponse).ToArray());
     }
 
@@ -193,8 +143,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminLessonResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<AdminLessonResponse>> CreateLesson(CreateLessonRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (!await db.Courses.AnyAsync(c => c.Id == request.CourseId, ct))
+        if (!await catalog.CourseExistsAsync(request.CourseId, ct))
         {
             return BadRequest(new ErrorResponse("invalid_course", "Course not found"));
         }
@@ -213,10 +162,8 @@ public sealed class AdminCatalogController(
             KeyVocabulary = request.KeyVocabulary
         };
 
-        db.Lessons.Add(lesson);
-        await db.SaveChangesAsync(ct);
-
-        return CreatedAtAction(nameof(GetLesson), new { id = lesson.Id }, ToResponse(lesson));
+        var created = await catalog.CreateLessonAsync(lesson, ct);
+        return CreatedAtAction(nameof(GetLesson), new { id = created.Id }, ToResponse(created));
     }
 
     /// <summary>
@@ -227,8 +174,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminLessonResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminLessonResponse>> GetLesson(Guid id, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == id, ct);
+        var lesson = await catalog.GetAdminLessonAsync(id, ct);
         return lesson is null ? NotFound() : Ok(ToResponse(lesson));
     }
 
@@ -241,25 +187,15 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AdminLessonResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminLessonResponse>> UpdateLesson(Guid id, UpdateLessonRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == id, ct);
-        if (lesson is null)
-        {
-            return NotFound();
-        }
+        var lesson = await catalog.UpdateLessonAsync(
+            id,
+            new LessonUpdate(
+                request.Slug, request.Title, request.Summary, request.ContentMarkdown,
+                request.SortOrder, request.EstimatedMinutes, request.IsPublished,
+                request.GrammarTopicId, request.KeyVocabulary),
+            ct);
 
-        if (request.Slug is not null) lesson.Slug = request.Slug;
-        if (request.Title is not null) lesson.Title = request.Title;
-        if (request.Summary is not null) lesson.Summary = request.Summary;
-        if (request.ContentMarkdown is not null) lesson.ContentMarkdown = request.ContentMarkdown;
-        if (request.SortOrder is { } order) lesson.SortOrder = order;
-        if (request.EstimatedMinutes is { } minutes) lesson.EstimatedMinutes = minutes;
-        if (request.IsPublished is { } published) lesson.IsPublished = published;
-        if (request.GrammarTopicId is { } topicId) lesson.GrammarTopicId = topicId;
-        if (request.KeyVocabulary is { } vocab) lesson.KeyVocabulary = vocab;
-
-        await db.SaveChangesAsync(ct);
-        return Ok(ToResponse(lesson));
+        return lesson is null ? NotFound() : Ok(ToResponse(lesson));
     }
 
     /// <summary>
@@ -270,16 +206,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteLesson(Guid id, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == id, ct);
-        if (lesson is null)
-        {
-            return NotFound();
-        }
-
-        db.Lessons.Remove(lesson);
-        await db.SaveChangesAsync(ct);
-        return NoContent();
+        return await catalog.DeleteLessonAsync(id, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -292,12 +219,11 @@ public sealed class AdminCatalogController(
     public async Task<ActionResult<GenerateLessonContentResponse>> GenerateLesson(
         Guid id, [FromBody] GenerateLessonContentRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.AsNoTracking().FirstOrDefaultAsync(l => l.Id == id, ct)
+        var courseId = await catalog.GetLessonCourseIdAsync(id, ct)
             ?? throw new InvalidOperationException("Lesson not found");
         var lessonPrompt = await LoadLessonPromptAsync(ct);
         var result = await contentGeneration.GenerateLessonAsync(
-            lesson.CourseId, request.Topic, request.Level, request.Requirements, request.Provider, request.Model, lessonPrompt, request.DurationMinutes, request.Summary, ct);
+            courseId, request.Topic, request.Level, request.Requirements, request.Provider, request.Model, lessonPrompt, request.DurationMinutes, request.Summary, ct);
 
         return Ok(new GenerateLessonContentResponse(
             result.Title, result.Summary, result.ContentMarkdown, result.KeyVocabulary,
@@ -314,15 +240,14 @@ public sealed class AdminCatalogController(
     public async Task<ActionResult<GenerateCourseContentResponse>> GenerateCourse(
         Guid id, [FromBody] GenerateCourseContentRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var course = await db.Courses.FirstOrDefaultAsync(c => c.Id == id, ct);
-        if (course is null)
+        var languageId = await catalog.GetCourseLanguageIdAsync(id, ct);
+        if (languageId is null)
         {
             return NotFound();
         }
 
         var result = await contentGeneration.GenerateCourseAsync(
-            course.LanguageId, request.Topic, request.Level, request.LessonsCount, request.Provider, request.Model, ct);
+            languageId.Value, request.Topic, request.Level, request.LessonsCount, request.Provider, request.Model, ct);
 
         return Ok(new GenerateCourseContentResponse(
             result.Description, result.LessonTitles, result.Provider, result.Model, result.InputTokens, result.OutputTokens));
@@ -336,8 +261,7 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AiSettingsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiSettingsResponse>> GetAiSettings(CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return Ok(await BuildAiSettingsResponse(db, ct));
+        return Ok(await BuildAiSettingsResponse(ct));
     }
 
     /// <summary>
@@ -349,9 +273,8 @@ public sealed class AdminCatalogController(
     [ProducesResponseType(typeof(AiSettingsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiSettingsResponse>> UpdateAiSettings(UpdateAiSettingsRequest request, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var setting = await db.AppSettings.FirstOrDefaultAsync(s => s.Key == AiSettingsKey, ct);
-        var json = setting?.Value?.DeepClone() as JsonObject ?? new JsonObject();
+        var saved = await aiDb.GetSettingAsync(AiSettingsKey, ct);
+        var json = saved?.DeepClone() as JsonObject ?? new JsonObject();
 
         if (request.DefaultChatProvider is { } p) json["defaultChatProvider"] = p;
         if (request.DefaultEmbeddingProvider is { } e) json["defaultEmbeddingProvider"] = e;
@@ -382,18 +305,8 @@ public sealed class AdminCatalogController(
             json["providers"] = providers;
         }
 
-        if (setting is null)
-        {
-            db.AppSettings.Add(new AppSetting { Key = AiSettingsKey, Value = json });
-        }
-        else
-        {
-            setting.Value = json;
-            setting.UpdatedAt = clock.UtcNow;
-        }
-
-        await db.SaveChangesAsync(ct);
-        return Ok(await BuildAiSettingsResponse(db, ct));
+        await aiDb.SaveSettingAsync(AiSettingsKey, json, clock.UtcNow, ct);
+        return Ok(await BuildAiSettingsResponse(ct));
     }
 
     /// <summary>
@@ -427,16 +340,17 @@ public sealed class AdminCatalogController(
 
     private async Task<string?> LoadLessonPromptAsync(CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var setting = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AiSettingsKey, ct);
-        var json = setting?.Value as JsonObject;
+        var json = await aiDb.GetSettingAsync(AiSettingsKey, ct);
         return json?["lessonPrompt"]?.ToString();
     }
 
-    private async Task<AiSettingsResponse> BuildAiSettingsResponse(AppDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Собирает ответ с настройками ИИ: значения из базы перекрывают конфигурацию приложения,
+    /// поэтому редактирование через панель управления не требует перезапуска сервиса.
+    /// </summary>
+    private async Task<AiSettingsResponse> BuildAiSettingsResponse(CancellationToken ct)
     {
-        var setting = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AiSettingsKey, ct);
-        var json = setting?.Value as JsonObject ?? new JsonObject();
+        var json = await aiDb.GetSettingAsync(AiSettingsKey, ct) ?? new JsonObject();
         var opts = aiOptions.Value;
 
         var providersObj = json["providers"] as JsonObject ?? new JsonObject();
@@ -471,12 +385,12 @@ public sealed class AdminCatalogController(
         };
     }
 
-    private static AdminCourseResponse ToResponse(Course c) => new(
-        c.Id, c.Slug, c.Title, c.Description, c.Level.ToString(), c.LanguageId,
-        c.Language?.Code ?? string.Empty, c.CoverUrl, c.AccentColor, c.EstimatedMinutes,
-        c.IsPublished, c.SortOrder, c.Lessons.Count, c.CreatedAt);
+    private static AdminCourseResponse ToResponse(AdminCourseItem c) => new(
+        c.Id, c.Slug, c.Title, c.Description, c.Level, c.LanguageId,
+        c.LanguageCode, c.CoverUrl, c.AccentColor, c.EstimatedMinutes,
+        c.IsPublished, c.SortOrder, c.LessonsCount, c.CreatedAt);
 
-    private static AdminLessonResponse ToResponse(Lesson l) => new(
+    private static AdminLessonResponse ToResponse(AdminLessonItem l) => new(
         l.Id, l.CourseId, l.Slug, l.Title, l.Summary, l.ContentMarkdown, l.SortOrder,
         l.EstimatedMinutes, l.IsPublished, l.GrammarTopicId, l.KeyVocabulary);
 }

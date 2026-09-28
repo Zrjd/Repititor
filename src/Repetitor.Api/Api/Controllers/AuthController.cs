@@ -1,13 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Configuration;
 using Repetitor.Api.Domain.Entities;
 using Repetitor.Api.Domain.Enums;
 using Repetitor.Api.Infrastructure.Auth;
-using Repetitor.Api.Infrastructure.Persistence;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 using Microsoft.Extensions.Options;
 using Repetitor.Api.Api.Infrastructure;
@@ -17,7 +16,8 @@ namespace Repetitor.Api.Api.Controllers;
 [ApiController]
 [Route("api/v1/auth")]
 public sealed class AuthController(
-    IDbContextFactory<AppDbContext> dbFactory,
+    IUserDbService users,
+    ICatalogDbService catalog,
     ITokenService tokens,
     IPasswordHasher hasher,
     IClock clock,
@@ -53,13 +53,12 @@ public sealed class AuthController(
 
         var options = learningOptions.Value;
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (await db.Users.AnyAsync(u => u.Email == email, ct))
+        if (await users.EmailExistsAsync(email, ct))
         {
             return Conflict(new ErrorResponse("email_taken", "Пользователь с таким email уже существует."));
         }
 
-        var languages = await db.Languages.OrderBy(l => l.SortOrder).ToListAsync(ct);
+        var languages = await catalog.GetAllLanguagesAsync(ct);
         if (languages.Count == 0)
         {
             return Problem("Справочник языков не инициализирован.", statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -87,21 +86,15 @@ public sealed class AuthController(
         user.InterfaceLanguage = interfaceLang;
         user.TargetLanguage = target;
 
-        db.Users.Add(user);
-
-        var firstDeck = new Deck
-        {
-            UserId = user.Id,
-            Name = "Мои слова",
-            Description = "Слова, добавленные вручную или найденные через поиск",
-            LanguageCode = target.Code
-        };
-        db.Decks.Add(firstDeck);
-
-        await db.SaveChangesAsync(ct);
+        await users.CreateWithFirstDeckAsync(
+            user,
+            "Мои слова",
+            "Слова, добавленные вручную или найденные через поиск",
+            target.Code,
+            ct);
 
         logger.LogInformation("Registered user {UserId} ({Email})", user.Id, user.Email);
-        return await IssueAsync(db, user, target, interfaceLang, ct);
+        return await IssueAsync(user, target, interfaceLang, ct);
     }
 
     /// <summary>
@@ -116,11 +109,7 @@ public sealed class AuthController(
     public async Task<ActionResult<TokenResponse>> Login(LoginRequest request, CancellationToken ct)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var user = await db.Users
-            .Include(u => u.TargetLanguage)
-            .Include(u => u.InterfaceLanguage)
-            .FirstOrDefaultAsync(u => u.Email == email, ct);
+        var user = await users.FindByEmailAsync(email, ct);
 
         if (user is null || !hasher.Verify(request.Password, user.PasswordHash))
         {
@@ -132,15 +121,11 @@ public sealed class AuthController(
             return Forbid();
         }
 
-        if (hasher.NeedsRehash(user.PasswordHash))
-        {
-            user.PasswordHash = hasher.Hash(request.Password);
-        }
+        // Хеш пересчитывается только если параметры алгоритма изменились, иначе остаётся прежним.
+        var rehashed = hasher.NeedsRehash(user.PasswordHash) ? hasher.Hash(request.Password) : null;
+        await users.TouchLastLoginAsync(user.Id, clock.UtcNow, rehashed, ct);
 
-        user.LastLoginAt = clock.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        return await IssueAsync(db, user, user.TargetLanguage!, user.InterfaceLanguage!, ct);
+        return await IssueAsync(user, user.TargetLanguage!, user.InterfaceLanguage!, ct);
     }
 
     /// <summary>
@@ -156,11 +141,7 @@ public sealed class AuthController(
     public async Task<ActionResult<TokenResponse>> Refresh(RefreshRequest request, CancellationToken ct)
     {
         var hash = tokens.HashOpaqueToken(request.RefreshToken);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var stored = await db.RefreshTokens
-            .Include(t => t.User).ThenInclude(u => u!.TargetLanguage)
-            .Include(t => t.User).ThenInclude(u => u!.InterfaceLanguage)
-            .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        var stored = await users.FindRefreshTokenAsync(hash, ct);
 
         if (stored is null || stored.RevokedAt is not null)
         {
@@ -178,23 +159,16 @@ public sealed class AuthController(
             return Forbid();
         }
 
-        stored.RevokedAt = clock.UtcNow;
-        stored.RevokedByRotation = true;
-
-        var rotated = tokens.CreateOpaqueToken(out var newHash);
-        var entity = new RefreshToken
-        {
-            UserId = user.Id,
-            TokenHash = newHash,
-            ExpiresAt = clock.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays),
-            UserAgent = Request.Headers.UserAgent.ToString(),
-            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-            ReplacedByTokenId = null
-        };
-        db.RefreshTokens.Add(entity);
-        await db.SaveChangesAsync(ct);
-        stored.ReplacedByTokenId = entity.Id;
-        await db.SaveChangesAsync(ct);
+        tokens.CreateOpaqueToken(out var newHash);
+        await users.RotateRefreshTokenAsync(
+            stored.Id,
+            user.Id,
+            newHash,
+            clock.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays),
+            Request.Headers.UserAgent.ToString(),
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            clock.UtcNow,
+            ct);
 
         var pair = tokens.CreateTokenPair(Subject(user));
         return Ok(BuildResponse(pair, user, user.TargetLanguage!, user.InterfaceLanguage!));
@@ -221,12 +195,8 @@ public sealed class AuthController(
             return NoContent();
         }
 
-        var hash = tokens.HashOpaqueToken(raw);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
         var userId = CurrentUserAccessor.GetUserId(User);
-        await db.RefreshTokens
-            .Where(t => t.UserId == userId && t.TokenHash == hash && t.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, clock.UtcNow), ct);
+        await users.RevokeRefreshTokenAsync(userId, tokens.HashOpaqueToken(raw), clock.UtcNow, ct);
 
         return NoContent();
     }
@@ -241,11 +211,7 @@ public sealed class AuthController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> LogoutAll(CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        await db.RefreshTokens
-            .Where(t => t.UserId == userId && t.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, clock.UtcNow), ct);
+        await users.RevokeAllRefreshTokensAsync(CurrentUserAccessor.GetUserId(User), clock.UtcNow, ct);
         return NoContent();
     }
 
@@ -260,13 +226,7 @@ public sealed class AuthController(
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<UserResponse>> Me(CancellationToken ct)
     {
-        var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var user = await db.Users
-            .Include(u => u.TargetLanguage)
-            .Include(u => u.InterfaceLanguage)
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
-
+        var user = await users.FindWithLanguagesAsync(CurrentUserAccessor.GetUserId(User), ct);
         return user is null ? Unauthorized() : Ok(user.ToResponse());
     }
 
@@ -290,8 +250,7 @@ public sealed class AuthController(
         }
 
         var userId = CurrentUserAccessor.GetUserId(User);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var user = await users.FindAsync(userId, ct);
         if (user is null)
         {
             return Unauthorized();
@@ -302,12 +261,8 @@ public sealed class AuthController(
             return ApiValidation.Invalid(new Dictionary<string, string[]> { ["currentPassword"] = ["Неверный текущий пароль."] });
         }
 
-        user.PasswordHash = hasher.Hash(request.NewPassword);
-        await db.SaveChangesAsync(ct);
-
-        await db.RefreshTokens
-            .Where(t => t.UserId == userId && t.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, clock.UtcNow), ct);
+        await users.SetPasswordHashAsync(userId, hasher.Hash(request.NewPassword), ct);
+        await users.RevokeAllRefreshTokensAsync(userId, clock.UtcNow, ct);
 
         return NoContent();
     }
@@ -324,18 +279,11 @@ public sealed class AuthController(
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email && u.IsActive, ct);
+        var user = await users.FindActiveByEmailAsync(email, ct);
         if (user is not null)
         {
             var token = tokens.CreateOpaqueToken(out var hash);
-            db.PasswordResetTokens.Add(new PasswordResetToken
-            {
-                UserId = user.Id,
-                TokenHash = hash,
-                ExpiresAt = clock.UtcNow.AddHours(2)
-            });
-            await db.SaveChangesAsync(ct);
+            await users.AddPasswordResetTokenAsync(user.Id, hash, clock.UtcNow.AddHours(2), ct);
 
             var baseUrl = jwtOptions.Value.ResetPasswordUrl;
             var resetLink = $"{baseUrl}?token={Uri.EscapeDataString(token)}";
@@ -363,33 +311,30 @@ public sealed class AuthController(
         }
 
         var hash = tokens.HashOpaqueToken(request.Token);
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var record = await db.PasswordResetTokens.FirstOrDefaultAsync(t => t.TokenHash == hash && t.UsedAt == null, ct);
+        var record = await users.FindPasswordResetTokenAsync(hash, ct);
 
         if (record is null || record.ExpiresAt <= clock.UtcNow)
         {
             return ApiValidation.Invalid(new Dictionary<string, string[]> { ["token"] = ["Токен недействителен или истёк."] });
         }
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == record.UserId, ct);
+        var user = await users.FindAsync(record.UserId, ct);
         if (user is null)
         {
             return ApiValidation.Invalid(new Dictionary<string, string[]> { ["token"] = ["Токен недействителен."] });
         }
 
-        user.PasswordHash = hasher.Hash(request.NewPassword);
-        record.UsedAt = clock.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        await db.RefreshTokens
-            .Where(t => t.UserId == user.Id && t.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, clock.UtcNow), ct);
+        await users.CompletePasswordResetAsync(record.Id, user.Id, hasher.Hash(request.NewPassword), clock.UtcNow, ct);
+        await users.RevokeAllRefreshTokensAsync(user.Id, clock.UtcNow, ct);
 
         return NoContent();
     }
 
+    /// <summary>
+    /// Выпускает пару токенов для пользователя: подписанный access-токен и новый refresh-токен,
+    /// который сразу сохраняется вместе с данными устройства для возможности отзыва.
+    /// </summary>
     private async Task<ActionResult<TokenResponse>> IssueAsync(
-        AppDbContext db,
         User user,
         Language target,
         Language interfaceLanguage,
@@ -397,15 +342,14 @@ public sealed class AuthController(
     {
         var pair = tokens.CreateTokenPair(Subject(user));
         var refresh = tokens.CreateOpaqueToken(out var hash);
-        db.RefreshTokens.Add(new RefreshToken
-        {
-            UserId = user.Id,
-            TokenHash = hash,
-            ExpiresAt = pair.RefreshTokenExpiresAt,
-            UserAgent = Request.Headers.UserAgent.ToString(),
-            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
-        });
-        await db.SaveChangesAsync(ct);
+        await users.AddRefreshTokenAsync(
+            user.Id,
+            hash,
+            pair.RefreshTokenExpiresAt,
+            Request.Headers.UserAgent.ToString(),
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ct);
+
         return Ok(BuildResponse(pair with { RefreshToken = refresh }, user, target, interfaceLanguage));
     }
 

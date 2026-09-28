@@ -13,6 +13,7 @@ using Repetitor.Api.Configuration;
 using Repetitor.Api.Domain.Entities;
 using Repetitor.Api.Infrastructure.Ai;
 using Repetitor.Api.Infrastructure.Auth;
+using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Persistence;
 using Repetitor.Api.Infrastructure.Persistence.Seeding;
 using Repetitor.Api.Infrastructure.Services;
@@ -72,6 +73,17 @@ builder.Services.AddScoped<IPronunciationService, PronunciationService>();
 builder.Services.AddScoped<IPracticeService, PracticeService>();
 builder.Services.AddScoped<ISpeechService, SpeechService>();
 builder.Services.AddSingleton<IMediaStorage, FileSystemMediaStorage>();
+
+// Слой доступа к данным: единственное место, где контроллеры работают с базой.
+builder.Services.AddScoped<IUserDbService, UserDbService>();
+builder.Services.AddScoped<ICatalogDbService, CatalogDbService>();
+builder.Services.AddScoped<ILexiconDbService, LexiconDbService>();
+builder.Services.AddScoped<IExerciseDbService, ExerciseDbService>();
+builder.Services.AddScoped<IChatDbService, ChatDbService>();
+builder.Services.AddScoped<IMediaDbService, MediaDbService>();
+builder.Services.AddScoped<IAiDbService, AiDbService>();
+builder.Services.AddScoped<IAdminDbService, AdminDbService>();
+
 builder.Services.AddScoped<SchemaPatches>();
 builder.Services.AddScoped<DatabaseInitializer>();
 
