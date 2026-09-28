@@ -37,6 +37,39 @@ docker compose down                   # остановить
 docker compose down -v                # остановить и удалить тома
 ```
 
+### Ollama на хосте (Docker Desktop / Windows и macOS)
+
+Если Ollama запущен на хосте, а не в контейнере, сервис `ollama` поднимать не нужно —
+это также снимает конфликт за порт `11434`. В `.env` укажите адрес хоста и модели,
+которые действительно загружены (`ollama list`):
+
+```dotenv
+OLLAMA_BASE_URL=http://host.docker.internal:11434/
+OLLAMA_CHAT_MODEL=Qwen3:8b
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
+
+```bash
+ollama pull Qwen3:8b              # чат-модель
+ollama pull nomic-embed-text      # модель эмбеддингов
+docker compose up -d api          # пересоздать api с новой конфигурацией
+curl -fsS -X POST http://localhost:8080/api/v1/admin/ai-settings/test?provider=ollama
+```
+
+Последний вызов требует токена администратора и делает реальный запрос генерации:
+`healthy=true` означает, что API видит Ollama и выбранные модели загружены.
+Если модель не загружена, приходит `404: model ... not found`.
+
+Полный набор переменных для Ollama:
+
+| Переменная | Назначение | По умолчанию |
+| --- | --- | --- |
+| `OLLAMA_ENABLED` | включить провайдер | `true` |
+| `OLLAMA_BASE_URL` | адрес API Ollama | `http://ollama:11434/` |
+| `OLLAMA_PORT` | публикация порта сервиса `ollama` | `11434` |
+| `OLLAMA_CHAT_MODEL` | модель чата | `qwen2.5:7b-instruct` |
+| `OLLAMA_EMBEDDING_MODEL` | модель эмбеддингов | `nomic-embed-text` |
+
 ## Ручное развёртывание
 
 ```bash

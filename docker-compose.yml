@@ -76,6 +76,8 @@ services:
       Ai__Providers__openai__ApiKey: ${OPENAI_API_KEY:-}
       Ai__Providers__ollama__Enabled: ${OLLAMA_ENABLED:-true}
       Ai__Providers__ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://ollama:11434/}
+      Ai__Providers__ollama__ChatModel: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b-instruct}
+      Ai__Providers__ollama__EmbeddingModel: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       Media__RootPath: /app/media
     ports:
       - "${API_PORT:-8080}:8080"

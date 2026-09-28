@@ -377,7 +377,7 @@ public sealed class VectorSearchService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await using var cmd = await CreateCommandAsync(db, ct);
         cmd.CommandText = $"""
-            WITH q AS (SELECT ({literal})::vector AS v)
+            WITH q AS (SELECT CAST(@vector AS vector) AS v)
             SELECT l."Id",
                    l."Text",
                    l."Translation",
@@ -404,6 +404,7 @@ public sealed class VectorSearchService(
 
         AddParam(cmd, "provider", providerName, NpgsqlDbType.Text);
         AddParam(cmd, "model", client.EmbeddingModel, NpgsqlDbType.Text);
+        AddParam(cmd, "vector", literal, NpgsqlDbType.Text);
         AddParam(cmd, "languageId", languageId, NpgsqlDbType.Uuid);
         AddParam(cmd, "translationLanguageId", translationLanguageId, NpgsqlDbType.Uuid);
         AddParam(cmd, "exclude_id", excludeLexicalUnitId?.ToString(), NpgsqlDbType.Uuid);
