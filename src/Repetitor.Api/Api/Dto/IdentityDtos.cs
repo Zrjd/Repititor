@@ -64,6 +64,12 @@ public sealed class RegisterRequest
     public Guid InterfaceLanguageId { get; set; }
     public CefrLevel Level { get; set; } = CefrLevel.A1;
     public int DailyGoalXp { get; set; } = 50;
+
+    /// <summary>
+    /// Роль нового пользователя. Разрешены только Learner и Teacher;
+    /// значение Admin отклоняется сервером, чтобы его нельзя было получить при регистрации.
+    /// </summary>
+    public UserRole Role { get; set; } = UserRole.Learner;
 }
 
 public sealed class LoginRequest

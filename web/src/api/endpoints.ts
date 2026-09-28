@@ -24,6 +24,7 @@ import type {
   ReviewRating,
   ReviewResult,
   SimilarWord,
+  SignupRole,
   UserProfile,
   UserWord,
   WordOfTheDay,
@@ -32,8 +33,8 @@ import type {
 export const authApi = {
   login: (email: string, password: string) =>
     api.post<AuthResponse>('/auth/login', { email, password }, { auth: false }),
-  register: (email: string, password: string, displayName: string) =>
-    api.post<AuthResponse>('/auth/register', { email, password, displayName }, { auth: false }),
+  register: (email: string, password: string, displayName: string, role: SignupRole) =>
+    api.post<AuthResponse>('/auth/register', { email, password, displayName, role }, { auth: false }),
   me: () => api.get<UserProfile>('/auth/me'),
   logout: (refreshToken: string) => api.post<void>('/auth/logout', { refreshToken }),
   logoutAll: () => api.post<void>('/auth/logout-all'),

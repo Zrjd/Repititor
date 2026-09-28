@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n } from '../i18n'
+import { useAuth } from '../auth/AuthContext'
 import { adminApi, catalogApi } from '../api/endpoints'
 import type { AdminCourse, AdminLesson, CefrLevel } from '../api/types'
 import { ErrorState, Spinner } from '../components/Feedback'
@@ -10,26 +11,31 @@ type Tab = 'courses' | 'lessons' | 'ai'
 
 export function AdminPage() {
   const { t } = useI18n()
+  const { user } = useAuth()
+  // Настройки ИИ глобальные и содержат ключи провайдеров, поэтому доступны только администратору.
+  const isAdmin = user?.role === 'Admin'
   const [tab, setTab] = useState<Tab>('courses')
 
   return (
     <>
       <PageHeader title={t('admin.title')} subtitle={t('admin.subtitle')} />
       <div className="admin-tabs">
-        {(['courses', 'lessons', 'ai'] as Tab[]).map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={`admin-tab${tab === key ? ' admin-tab--active' : ''}`}
-            onClick={() => setTab(key)}
-          >
-            {t(`admin.tab${key.charAt(0).toUpperCase() + key.slice(1)}` as 'admin.tabCourses')}
-          </button>
-        ))}
+        {(['courses', 'lessons', 'ai'] as Tab[])
+          .filter((key) => key !== 'ai' || isAdmin)
+          .map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`admin-tab${tab === key ? ' admin-tab--active' : ''}`}
+              onClick={() => setTab(key)}
+            >
+              {t(`admin.tab${key.charAt(0).toUpperCase() + key.slice(1)}` as 'admin.tabCourses')}
+            </button>
+          ))}
       </div>
       {tab === 'courses' ? <CoursesTab /> : null}
       {tab === 'lessons' ? <LessonsTab /> : null}
-      {tab === 'ai' ? <AiTab /> : null}
+      {tab === 'ai' && isAdmin ? <AiTab /> : null}
     </>
   )
 }

@@ -17,7 +17,8 @@ public sealed record AdminCourseResponse(
     bool IsPublished,
     int SortOrder,
     int LessonsCount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? OwnerDisplayName = null);
 
 public sealed class CreateCourseRequest
 {

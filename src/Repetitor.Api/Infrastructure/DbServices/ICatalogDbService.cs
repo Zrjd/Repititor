@@ -51,45 +51,52 @@ public interface ICatalogDbService
     /// <summary>Возвращает тему грамматики по идентификатору.</summary>
     Task<GrammarTopicItem?> GetGrammarTopicAsync(Guid id, CancellationToken ct);
 
-    /// <summary>Возвращает все курсы для панели управления, включая неопубликованные.</summary>
-    Task<IReadOnlyList<AdminCourseItem>> GetAdminCoursesAsync(Guid? languageId, bool includeUnpublished, CancellationToken ct);
+    /// <summary>
+    /// Возвращает курсы для панели управления, включая неопубликованные.
+    /// Учитель видит только свои курсы, администратор — все.
+    /// </summary>
+    Task<IReadOnlyList<AdminCourseItem>> GetAdminCoursesAsync(DbActor actor, Guid? languageId, bool includeUnpublished, CancellationToken ct);
 
-    /// <summary>Возвращает курс для редактирования в панели управления.</summary>
-    Task<AdminCourseItem?> GetAdminCourseAsync(Guid id, CancellationToken ct);
-
-    /// <summary>Создаёт курс в каталоге.</summary>
-    Task<AdminCourseItem> CreateCourseAsync(Course course, CancellationToken ct);
+    /// <summary>Возвращает курс для редактирования. Чужой курс учителю недоступен — 403.</summary>
+    Task<CatalogMutationResult<AdminCourseItem>> GetAdminCourseAsync(DbActor actor, Guid id, CancellationToken ct);
 
     /// <summary>
-    /// Частично обновляет курс. Перед сохранением проверяет существование языка,
-    /// чтобы в базу не попал курс со ссылкой на несуществующий язык.
+    /// Создаёт курс в каталоге. Курс учителя всегда получает его в качестве владельца
+    /// и создаётся черновиком: публикация выполняется отдельным запросом.
     /// </summary>
-    Task<CourseUpdateResult> UpdateCourseAsync(Guid id, CourseUpdate update, CancellationToken ct);
+    Task<AdminCourseItem> CreateCourseAsync(DbActor actor, Course course, CancellationToken ct);
 
-    /// <summary>Удаляет курс вместе со связанными данными.</summary>
-    Task<bool> DeleteCourseAsync(Guid id, CancellationToken ct);
+    /// <summary>
+    /// Частично обновляет курс. Перед сохранением проверяется существование языка,
+    /// а для учителя — владение курсом, чтобы в базу не попал курс со ссылкой
+    /// на несуществующий язык и чтобы учитель не правил чужие курсы.
+    /// </summary>
+    Task<CatalogMutationResult<AdminCourseItem>> UpdateCourseAsync(DbActor actor, Guid id, CourseUpdate update, CancellationToken ct);
 
-    /// <summary>Проверяет, что курс с указанным идентификатором существует.</summary>
-    Task<bool> CourseExistsAsync(Guid courseId, CancellationToken ct);
+    /// <summary>Публикует курс или снимает его с публикации. Учитель — только свой курс.</summary>
+    Task<CatalogMutationResult<AdminCourseItem>> SetCoursePublishedAsync(DbActor actor, Guid id, bool isPublished, CancellationToken ct);
+
+    /// <summary>Удаляет курс вместе со связанными данными. Учитель — только свой курс.</summary>
+    Task<CatalogMutationResult<bool>> DeleteCourseAsync(DbActor actor, Guid id, CancellationToken ct);
 
     /// <summary>Возвращает все уроки курса, включая неопубликованные, — для управления содержимым.</summary>
-    Task<IReadOnlyList<AdminLessonItem>> GetAdminCourseLessonsAsync(Guid courseId, CancellationToken ct);
+    Task<CatalogMutationResult<IReadOnlyList<AdminLessonItem>>> GetAdminCourseLessonsAsync(DbActor actor, Guid courseId, CancellationToken ct);
 
-    /// <summary>Возвращает урок для редактирования в панели управления.</summary>
-    Task<AdminLessonItem?> GetAdminLessonAsync(Guid id, CancellationToken ct);
+    /// <summary>Возвращает урок для редактирования. Чужой урок учителю недоступен — 403.</summary>
+    Task<CatalogMutationResult<AdminLessonItem>> GetAdminLessonAsync(DbActor actor, Guid id, CancellationToken ct);
 
-    /// <summary>Создаёт урок в указанном курсе.</summary>
-    Task<AdminLessonItem> CreateLessonAsync(Lesson lesson, CancellationToken ct);
+    /// <summary>Создаёт урок в указанном курсе. Учитель может создать урок только в своём курсе.</summary>
+    Task<CatalogMutationResult<AdminLessonItem>> CreateLessonAsync(DbActor actor, Lesson lesson, CancellationToken ct);
 
-    /// <summary>Частично обновляет урок.</summary>
-    Task<AdminLessonItem?> UpdateLessonAsync(Guid id, LessonUpdate update, CancellationToken ct);
+    /// <summary>Частично обновляет урок. Учитель может обновить только урок своего курса.</summary>
+    Task<CatalogMutationResult<AdminLessonItem>> UpdateLessonAsync(DbActor actor, Guid id, LessonUpdate update, CancellationToken ct);
 
-    /// <summary>Удаляет урок из курса.</summary>
-    Task<bool> DeleteLessonAsync(Guid id, CancellationToken ct);
+    /// <summary>Удаляет урок из курса. Учитель может удалить только урок своего курса.</summary>
+    Task<CatalogMutationResult<bool>> DeleteLessonAsync(DbActor actor, Guid id, CancellationToken ct);
 
     /// <summary>Определяет идентификатор курса урока — нужен для генерации содержимого с опорой на курс.</summary>
-    Task<Guid?> GetLessonCourseIdAsync(Guid lessonId, CancellationToken ct);
+    Task<CatalogMutationResult<Guid>> GetLessonCourseIdAsync(DbActor actor, Guid lessonId, CancellationToken ct);
 
     /// <summary>Определяет идентификатор языка курса — нужен для генерации структуры курса.</summary>
-    Task<Guid?> GetCourseLanguageIdAsync(Guid courseId, CancellationToken ct);
+    Task<CatalogMutationResult<Guid>> GetCourseLanguageIdAsync(DbActor actor, Guid courseId, CancellationToken ct);
 }

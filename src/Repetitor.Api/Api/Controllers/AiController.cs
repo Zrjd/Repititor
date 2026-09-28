@@ -115,9 +115,10 @@ public sealed class AiController(
     /// Пересоздаёт индекс эмбеддингов словаря для полнотекстового и семантического поиска.
     /// Позволяет указать провайдера, размер пакета и ограничение на количество записей.
     /// Параметр force принудительно пересоздаёт существующие эмбеддинги.
+    /// Операция глобальная и расходует квоту ИИ, поэтому доступна только администратору.
     /// </summary>
     [HttpPost("dictionary/reindex")]
-    [Authorize(Roles = "Admin,Teacher")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ReindexResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ReindexResponse>> Reindex([FromQuery] string? provider, [FromQuery] int batchSize = 64, [FromQuery] int limit = 1000, [FromQuery] bool force = false, CancellationToken ct = default)
     {
@@ -155,9 +156,13 @@ public sealed class AiController(
     }
 }
 
+/// <summary>
+/// Платформенные административные операции: статистика, управление пользователями и очистка журналов ИИ.
+/// Доступно только администратору: роль учителя ограничена собственными курсами и уроками.
+/// </summary>
 [ApiController]
 [Route("api/v1/admin")]
-[Authorize(Roles = "Admin,Teacher")]
+[Authorize(Roles = "Admin")]
 public sealed class AdminController(
     IAdminDbService admin,
     IAiDbService aiDb,

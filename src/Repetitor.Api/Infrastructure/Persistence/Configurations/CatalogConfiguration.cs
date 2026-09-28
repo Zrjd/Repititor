@@ -28,7 +28,7 @@ public sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
 {
     /// <summary>
     /// Настраивает сопоставление сущности Course с таблицей courses.
-    /// Определяет параметры курсов, включая slug, название, уровень и связь с языком.
+    /// Определяет параметры курсов, включая slug, название, уровень, связь с языком и автором-учителем.
     /// </summary>
     public void Configure(EntityTypeBuilder<Course> b)
     {
@@ -36,6 +36,7 @@ public sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
         b.HasKey(x => x.Id);
         b.Property(x => x.Slug).HasMaxLength(120).IsRequired();
         b.HasIndex(x => new { x.LanguageId, x.Slug }).IsUnique();
+        b.HasIndex(x => x.OwnerUserId);
         b.Property(x => x.Title).HasMaxLength(200).IsRequired();
         b.Property(x => x.Description).HasMaxLength(2000);
         b.Property(x => x.Level).HasConversion<string>().HasMaxLength(8);
@@ -44,6 +45,8 @@ public sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
         b.Property(x => x.CreatedAt).HasColumnType("timestamptz");
         b.HasOne(x => x.Language).WithMany()
             .HasForeignKey(x => x.LanguageId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.Owner).WithMany()
+            .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 

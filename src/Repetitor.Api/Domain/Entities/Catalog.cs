@@ -31,6 +31,15 @@ public sealed class Course
     public int SortOrder { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// Автор курса. Заполняется для курсов, созданных учителем: он управляет только своими курсами.
+    /// Для системных курсов остаётся пустым — ими управляет администратор.
+    /// </summary>
+    public Guid? OwnerUserId { get; set; }
+
+    /// <summary>Пользователь-владелец курса, если курс создан учителем.</summary>
+    public User? Owner { get; set; }
+
     public ICollection<Lesson> Lessons { get; set; } = [];
 }
 

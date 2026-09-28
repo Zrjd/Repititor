@@ -2,14 +2,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ApiError, setUnauthorizedHandler, tokenStore } from '../api/client'
 import { authApi } from '../api/endpoints'
-import type { AuthResponse, UserProfile } from '../api/types'
+import type { AuthResponse, SignupRole, UserProfile } from '../api/types'
 
 interface AuthValue {
   user: UserProfile | null
   isAuthenticated: boolean
   isBootstrapping: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, displayName: string) => Promise<void>
+  signUp: (email: string, password: string, displayName: string, role: SignupRole) => Promise<void>
   signOut: (everywhere?: boolean) => Promise<void>
   refreshUser: () => Promise<void>
   patchUser: (patch: Partial<UserProfile>) => void
@@ -91,8 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn: async (email, password) => {
         applySession(await authApi.login(email, password))
       },
-      signUp: async (email, password, displayName) => {
-        applySession(await authApi.register(email, password, displayName))
+      signUp: async (email, password, displayName, role) => {
+        applySession(await authApi.register(email, password, displayName, role))
       },
       signOut,
       refreshUser: async () => {

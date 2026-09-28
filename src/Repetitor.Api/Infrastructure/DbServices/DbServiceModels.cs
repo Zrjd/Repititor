@@ -102,7 +102,42 @@ public sealed record GrammarTopicItem(
 /// <summary>Результат загрузки уроков курса: признак существования курса и сами уроки.</summary>
 public sealed record CourseLessonsResult(bool CourseExists, IReadOnlyList<LessonCatalogItem> Lessons);
 
-/// <summary>Курс для панели администратора.</summary>
+/// <summary>
+/// Итог операции над объектом каталога с учётом прав: учитель управляет только своими курсами и уроками,
+/// администратор — всеми.
+/// </summary>
+public enum CatalogMutationStatus
+{
+    /// <summary>Операция выполнена.</summary>
+    Ok,
+
+    /// <summary>Объект не найден — соответствует 404.</summary>
+    NotFound,
+
+    /// <summary>Объект принадлежит другому пользователю — соответствует 403.</summary>
+    Forbidden,
+
+    /// <summary>В запросе указан несуществующий язык — соответствует 400.</summary>
+    InvalidLanguage
+}
+
+/// <summary>Результат операции над объектом каталога: статус и, при успехе, данные объекта.</summary>
+public sealed record CatalogMutationResult<T>(CatalogMutationStatus Status, T? Value)
+{
+    /// <summary>Создаёт успешный результат с данными.</summary>
+    public static CatalogMutationResult<T> Ok(T value) => new(CatalogMutationStatus.Ok, value);
+
+    /// <summary>Создаёт результат «объект не найден».</summary>
+    public static CatalogMutationResult<T> NotFound() => new(CatalogMutationStatus.NotFound, default);
+
+    /// <summary>Создаёт результат «нет прав на объект».</summary>
+    public static CatalogMutationResult<T> Forbidden() => new(CatalogMutationStatus.Forbidden, default);
+
+    /// <summary>Создаёт результат «указан несуществующий язык».</summary>
+    public static CatalogMutationResult<T> InvalidLanguage() => new(CatalogMutationStatus.InvalidLanguage, default);
+}
+
+/// <summary>Курс для панели администратора и кабинета учителя.</summary>
 public sealed record AdminCourseItem(
     Guid Id,
     string Slug,
@@ -117,7 +152,9 @@ public sealed record AdminCourseItem(
     bool IsPublished,
     int SortOrder,
     int LessonsCount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? OwnerUserId = null,
+    string? OwnerDisplayName = null);
 
 /// <summary>Урок для панели администратора.</summary>
 public sealed record AdminLessonItem(
@@ -145,9 +182,6 @@ public sealed record CourseUpdate(
     int? EstimatedMinutes,
     bool? IsPublished,
     int? SortOrder);
-
-/// <summary>Результат обновления курса: ошибка возникает, если языка или курса нет.</summary>
-public sealed record CourseUpdateResult(AdminCourseItem? Course, bool NotFound, bool InvalidLanguage);
 
 /// <summary>Частичное обновление урока: null означает «поле не передано, оставить как есть».</summary>
 public sealed record LessonUpdate(

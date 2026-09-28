@@ -30,6 +30,8 @@ public sealed class AuthController(
     /// Регистрирует нового пользователя в системе.
     /// Создаёт аккаунт с указанным email и паролем, проверяет уникальность email,
     /// устанавливает языки по умолчанию и выдаёт пару токенов доступа.
+    /// Роль выбирается при регистрации: ученик или учитель (создаёт собственные курсы);
+    /// роль администратора недоступна для самостоятельной регистрации.
     /// Также создаёт стартодеку "Мои слова" для нового пользователя.
     /// </summary>
     [HttpPost("register")]
@@ -48,6 +50,14 @@ public sealed class AuthController(
                 [
                     "Пароль должен содержать минимум 8 символов, буквы разных регистров и цифры."
                 ]
+            });
+        }
+
+        if (request.Role is not (UserRole.Learner or UserRole.Teacher))
+        {
+            return ApiValidation.Invalid(new Dictionary<string, string[]>
+            {
+                ["role"] = ["Допустимые роли при регистрации: Learner (ученик) и Teacher (учитель)."]
             });
         }
 
@@ -76,6 +86,7 @@ public sealed class AuthController(
             Email = email,
             PasswordHash = hasher.Hash(request.Password),
             DisplayName = request.DisplayName.Trim(),
+            Role = request.Role,
             TargetLanguageId = target.Id,
             InterfaceLanguageId = interfaceLang.Id,
             Level = request.Level,

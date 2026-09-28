@@ -58,6 +58,20 @@ public sealed class UserDbService(IDbContextFactory<AppDbContext> dbFactory) : I
         CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        user.Role = user.Role == UserRole.Teacher ? UserRole.Teacher : UserRole.Learner;
+
+        // Языки получены из другого контекста, поэтому прикрепляем их без изменений:
+        // иначе EF счёл бы существующие строки справочника новыми и попытался вставить их повторно.
+        if (user.InterfaceLanguage is { } interfaceLanguage)
+        {
+            db.Languages.Attach(interfaceLanguage);
+        }
+
+        if (user.TargetLanguage is { } targetLanguage)
+        {
+            db.Languages.Attach(targetLanguage);
+        }
+
         db.Users.Add(user);
         db.Decks.Add(new Deck
         {

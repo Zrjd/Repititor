@@ -4,24 +4,34 @@ import { useAuth } from '../auth/AuthContext'
 import { useI18n } from '../i18n'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { ApiError } from '../api/client'
+import type { SignupRole } from '../api/types'
+
+const ROLES: SignupRole[] = ['Learner', 'Teacher']
 
 export function RegisterPage() {
   const { t } = useI18n()
   const { signUp } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ email: '', password: '', displayName: '' })
+  const [form, setForm] = useState({ email: '', password: '', displayName: '', role: 'Learner' as SignupRole })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const update = (key: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm((prev) => ({ ...prev, [key]: event.target.value }))
 
+  const selectRole = (role: SignupRole) => () => setForm((prev) => ({ ...prev, role }))
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      await signUp(form.email.trim(), form.password, form.displayName.trim() || form.email.split('@')[0])
+      await signUp(
+        form.email.trim(),
+        form.password,
+        form.displayName.trim() || form.email.split('@')[0],
+        form.role,
+      )
       navigate('/', { replace: true })
     } catch (cause) {
       setError(
@@ -47,6 +57,24 @@ export function RegisterPage() {
 
       <form className="auth__form card" onSubmit={submit}>
         <h2>{t('auth.signUp')}</h2>
+
+        <div className="field">
+          <span>{t('auth.role')}</span>
+          <div className="role-picker">
+            {ROLES.map((role) => (
+              <button
+                key={role}
+                type="button"
+                className={`role-option${form.role === role ? ' role-option--active' : ''}`}
+                onClick={selectRole(role)}
+                aria-pressed={form.role === role}
+              >
+                <strong>{t(`auth.role${role}` as 'auth.roleLearner')}</strong>
+                <small>{t(`auth.role${role}Hint` as 'auth.roleLearnerHint')}</small>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <label className="field">
           <span>{t('auth.displayName')}</span>

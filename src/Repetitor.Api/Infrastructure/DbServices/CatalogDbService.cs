@@ -224,12 +224,23 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
     }
 
     public async Task<IReadOnlyList<AdminCourseItem>> GetAdminCoursesAsync(
+        DbActor actor,
         Guid? languageId,
         bool includeUnpublished,
         CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var query = db.Courses.Include(c => c.Language).AsNoTracking().AsQueryable();
+        var query = db.Courses
+            .Include(c => c.Language)
+            .Include(c => c.Owner)
+            .Include(c => c.Lessons)
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (!IsAdmin(actor))
+        {
+            query = query.Where(c => c.OwnerUserId == actor.UserId);
+        }
 
         if (languageId is { } lid)
         {
@@ -249,35 +260,76 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
         return courses.Select(MapAdminCourse).ToArray();
     }
 
-    public async Task<AdminCourseItem?> GetAdminCourseAsync(Guid id, CancellationToken ct)
+    public async Task<CatalogMutationResult<AdminCourseItem>> GetAdminCourseAsync(DbActor actor, Guid id, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var course = await db.Courses.Include(c => c.Language).FirstOrDefaultAsync(c => c.Id == id, ct);
-        return course is null ? null : MapAdminCourse(course);
+        var course = await db.Courses
+            .Include(c => c.Language)
+            .Include(c => c.Owner)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (course is null)
+        {
+            return CatalogMutationResult<AdminCourseItem>.NotFound();
+        }
+
+        return CanManageCourse(actor, course)
+            ? CatalogMutationResult<AdminCourseItem>.Ok(MapAdminCourse(course))
+            : CatalogMutationResult<AdminCourseItem>.Forbidden();
     }
 
-    public async Task<AdminCourseItem> CreateCourseAsync(Course course, CancellationToken ct)
+    public async Task<AdminCourseItem> CreateCourseAsync(DbActor actor, Course course, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        string? ownerName = null;
+
+        // Курс учителя всегда принадлежит ему и появляется как черновик: публикация — отдельное действие.
+        if (IsAdmin(actor))
+        {
+            course.OwnerUserId = null;
+        }
+        else
+        {
+            course.OwnerUserId = actor.UserId;
+            ownerName = await db.Users
+                .Where(u => u.Id == actor.UserId)
+                .Select(u => u.DisplayName)
+                .FirstOrDefaultAsync(ct);
+            course.IsPublished = false;
+        }
+
         db.Courses.Add(course);
         await db.SaveChangesAsync(ct);
-        return MapAdminCourse(course);
+        return MapAdminCourse(course) with { OwnerDisplayName = ownerName };
     }
 
-    public async Task<CourseUpdateResult> UpdateCourseAsync(Guid id, CourseUpdate update, CancellationToken ct)
+    public async Task<CatalogMutationResult<AdminCourseItem>> UpdateCourseAsync(
+        DbActor actor,
+        Guid id,
+        CourseUpdate update,
+        CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         // Смену языка проверяем до правок, чтобы курс не остался со ссылкой на несуществующий язык.
         if (update.LanguageId is { } languageId && !await db.Languages.AnyAsync(l => l.Id == languageId, ct))
         {
-            return new CourseUpdateResult(null, false, true);
+            return CatalogMutationResult<AdminCourseItem>.InvalidLanguage();
         }
 
-        var course = await db.Courses.Include(c => c.Language).FirstOrDefaultAsync(c => c.Id == id, ct);
+        var course = await db.Courses
+            .Include(c => c.Language)
+            .Include(c => c.Owner)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
         if (course is null)
         {
-            return new CourseUpdateResult(null, true, false);
+            return CatalogMutationResult<AdminCourseItem>.NotFound();
+        }
+
+        if (!CanManageCourse(actor, course))
+        {
+            return CatalogMutationResult<AdminCourseItem>.Forbidden();
         }
 
         if (update.Slug is not null) course.Slug = update.Slug;
@@ -292,61 +344,137 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
         if (update.SortOrder is { } order) course.SortOrder = order;
 
         await db.SaveChangesAsync(ct);
-        return new CourseUpdateResult(MapAdminCourse(course), false, false);
+        return CatalogMutationResult<AdminCourseItem>.Ok(MapAdminCourse(course));
     }
 
-    public async Task<bool> DeleteCourseAsync(Guid id, CancellationToken ct)
+    public async Task<CatalogMutationResult<AdminCourseItem>> SetCoursePublishedAsync(
+        DbActor actor,
+        Guid id,
+        bool isPublished,
+        CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var course = await db.Courses
+            .Include(c => c.Language)
+            .Include(c => c.Owner)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (course is null)
+        {
+            return CatalogMutationResult<AdminCourseItem>.NotFound();
+        }
+
+        if (!CanManageCourse(actor, course))
+        {
+            return CatalogMutationResult<AdminCourseItem>.Forbidden();
+        }
+
+        course.IsPublished = isPublished;
+        await db.SaveChangesAsync(ct);
+        return CatalogMutationResult<AdminCourseItem>.Ok(MapAdminCourse(course));
+    }
+
+    public async Task<CatalogMutationResult<bool>> DeleteCourseAsync(DbActor actor, Guid id, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var course = await db.Courses.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (course is null)
         {
-            return false;
+            return CatalogMutationResult<bool>.NotFound();
+        }
+
+        if (!CanManageCourse(actor, course))
+        {
+            return CatalogMutationResult<bool>.Forbidden();
         }
 
         db.Courses.Remove(course);
         await db.SaveChangesAsync(ct);
-        return true;
+        return CatalogMutationResult<bool>.Ok(true);
     }
 
-    public async Task<bool> CourseExistsAsync(Guid courseId, CancellationToken ct)
+    public async Task<CatalogMutationResult<IReadOnlyList<AdminLessonItem>>> GetAdminCourseLessonsAsync(
+        DbActor actor,
+        Guid courseId,
+        CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Courses.AnyAsync(c => c.Id == courseId, ct);
-    }
+        var course = await db.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId, ct);
+        if (course is null)
+        {
+            return CatalogMutationResult<IReadOnlyList<AdminLessonItem>>.NotFound();
+        }
 
-    public async Task<IReadOnlyList<AdminLessonItem>> GetAdminCourseLessonsAsync(Guid courseId, CancellationToken ct)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        if (!CanManageCourse(actor, course))
+        {
+            return CatalogMutationResult<IReadOnlyList<AdminLessonItem>>.Forbidden();
+        }
+
         var lessons = await db.Lessons
             .Where(l => l.CourseId == courseId)
             .OrderBy(l => l.SortOrder)
             .ToListAsync(ct);
-        return lessons.Select(MapAdminLesson).ToArray();
+        return CatalogMutationResult<IReadOnlyList<AdminLessonItem>>.Ok(lessons.Select(MapAdminLesson).ToArray());
     }
 
-    public async Task<AdminLessonItem?> GetAdminLessonAsync(Guid id, CancellationToken ct)
+    public async Task<CatalogMutationResult<AdminLessonItem>> GetAdminLessonAsync(DbActor actor, Guid id, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == id, ct);
-        return lesson is null ? null : MapAdminLesson(lesson);
-    }
+        var lesson = await db.Lessons
+            .Include(l => l.Course)
+            .FirstOrDefaultAsync(l => l.Id == id, ct);
 
-    public async Task<AdminLessonItem> CreateLessonAsync(Lesson lesson, CancellationToken ct)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        db.Lessons.Add(lesson);
-        await db.SaveChangesAsync(ct);
-        return MapAdminLesson(lesson);
-    }
-
-    public async Task<AdminLessonItem?> UpdateLessonAsync(Guid id, LessonUpdate update, CancellationToken ct)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (lesson is null)
         {
-            return null;
+            return CatalogMutationResult<AdminLessonItem>.NotFound();
+        }
+
+        return CanManageCourse(actor, lesson.Course)
+            ? CatalogMutationResult<AdminLessonItem>.Ok(MapAdminLesson(lesson))
+            : CatalogMutationResult<AdminLessonItem>.Forbidden();
+    }
+
+    public async Task<CatalogMutationResult<AdminLessonItem>> CreateLessonAsync(
+        DbActor actor,
+        Lesson lesson,
+        CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var course = await db.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == lesson.CourseId, ct);
+        if (course is null)
+        {
+            return CatalogMutationResult<AdminLessonItem>.NotFound();
+        }
+
+        if (!CanManageCourse(actor, course))
+        {
+            return CatalogMutationResult<AdminLessonItem>.Forbidden();
+        }
+
+        db.Lessons.Add(lesson);
+        await db.SaveChangesAsync(ct);
+        return CatalogMutationResult<AdminLessonItem>.Ok(MapAdminLesson(lesson));
+    }
+
+    public async Task<CatalogMutationResult<AdminLessonItem>> UpdateLessonAsync(
+        DbActor actor,
+        Guid id,
+        LessonUpdate update,
+        CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var lesson = await db.Lessons
+            .Include(l => l.Course)
+            .FirstOrDefaultAsync(l => l.Id == id, ct);
+
+        if (lesson is null)
+        {
+            return CatalogMutationResult<AdminLessonItem>.NotFound();
+        }
+
+        if (!CanManageCourse(actor, lesson.Course))
+        {
+            return CatalogMutationResult<AdminLessonItem>.Forbidden();
         }
 
         if (update.Slug is not null) lesson.Slug = update.Slug;
@@ -360,40 +488,68 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
         if (update.KeyVocabulary is { } vocab) lesson.KeyVocabulary = vocab;
 
         await db.SaveChangesAsync(ct);
-        return MapAdminLesson(lesson);
+        return CatalogMutationResult<AdminLessonItem>.Ok(MapAdminLesson(lesson));
     }
 
-    public async Task<bool> DeleteLessonAsync(Guid id, CancellationToken ct)
+    public async Task<CatalogMutationResult<bool>> DeleteLessonAsync(DbActor actor, Guid id, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == id, ct);
+        var lesson = await db.Lessons
+            .Include(l => l.Course)
+            .FirstOrDefaultAsync(l => l.Id == id, ct);
+
         if (lesson is null)
         {
-            return false;
+            return CatalogMutationResult<bool>.NotFound();
+        }
+
+        if (!CanManageCourse(actor, lesson.Course))
+        {
+            return CatalogMutationResult<bool>.Forbidden();
         }
 
         db.Lessons.Remove(lesson);
         await db.SaveChangesAsync(ct);
-        return true;
+        return CatalogMutationResult<bool>.Ok(true);
     }
 
-    public async Task<Guid?> GetLessonCourseIdAsync(Guid lessonId, CancellationToken ct)
+    public async Task<CatalogMutationResult<Guid>> GetLessonCourseIdAsync(DbActor actor, Guid lessonId, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Lessons.AsNoTracking()
-            .Where(l => l.Id == lessonId)
-            .Select(l => (Guid?)l.CourseId)
-            .FirstOrDefaultAsync(ct);
+        var lesson = await db.Lessons
+            .Include(l => l.Course)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == lessonId, ct);
+
+        if (lesson is null)
+        {
+            return CatalogMutationResult<Guid>.NotFound();
+        }
+
+        return CanManageCourse(actor, lesson.Course)
+            ? CatalogMutationResult<Guid>.Ok(lesson.CourseId)
+            : CatalogMutationResult<Guid>.Forbidden();
     }
 
-    public async Task<Guid?> GetCourseLanguageIdAsync(Guid courseId, CancellationToken ct)
+    public async Task<CatalogMutationResult<Guid>> GetCourseLanguageIdAsync(DbActor actor, Guid courseId, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Courses.AsNoTracking()
-            .Where(c => c.Id == courseId)
-            .Select(c => (Guid?)c.LanguageId)
-            .FirstOrDefaultAsync(ct);
+        var course = await db.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId, ct);
+        if (course is null)
+        {
+            return CatalogMutationResult<Guid>.NotFound();
+        }
+
+        return CanManageCourse(actor, course)
+            ? CatalogMutationResult<Guid>.Ok(course.LanguageId)
+            : CatalogMutationResult<Guid>.Forbidden();
     }
+
+    private static bool IsAdmin(DbActor actor) => actor.Role == UserRole.Admin;
+
+    /// <summary>Администратор управляет всеми курсами, учитель — только теми, которые создал сам.</summary>
+    private static bool CanManageCourse(DbActor actor, Course? course) =>
+        IsAdmin(actor) || course is not null && course.OwnerUserId == actor.UserId;
 
     private static CourseCatalogItem MapCourse(Course course, CourseEnrollment? enrollment)
     {
@@ -411,7 +567,8 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
     private static AdminCourseItem MapAdminCourse(Course course) => new(
         course.Id, course.Slug, course.Title, course.Description, course.Level.ToString(), course.LanguageId,
         course.Language?.Code ?? string.Empty, course.CoverUrl, course.AccentColor, course.EstimatedMinutes,
-        course.IsPublished, course.SortOrder, course.Lessons.Count, course.CreatedAt);
+        course.IsPublished, course.SortOrder, course.Lessons.Count, course.CreatedAt,
+        course.OwnerUserId, course.Owner?.DisplayName);
 
     private static AdminLessonItem MapAdminLesson(Lesson lesson) => new(
         lesson.Id, lesson.CourseId, lesson.Slug, lesson.Title, lesson.Summary, lesson.ContentMarkdown,
