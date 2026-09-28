@@ -83,6 +83,7 @@ builder.Services.AddScoped<IChatDbService, ChatDbService>();
 builder.Services.AddScoped<IMediaDbService, MediaDbService>();
 builder.Services.AddScoped<IAiDbService, AiDbService>();
 builder.Services.AddScoped<IAdminDbService, AdminDbService>();
+builder.Services.AddScoped<IGroupDbService, GroupDbService>();
 
 builder.Services.AddScoped<SchemaPatches>();
 builder.Services.AddScoped<DatabaseInitializer>();

@@ -56,6 +56,14 @@ public sealed partial class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<PronunciationAttempt> PronunciationAttempts => Set<PronunciationAttempt>();
     /// <summary>Коллекция записей об обращениях к ИИ-сервисам.</summary>
     public DbSet<AiCallLog> AiCallLogs => Set<AiCallLog>();
+    /// <summary>Коллекция учебных групп учителей.</summary>
+    public DbSet<StudyGroup> StudyGroups => Set<StudyGroup>();
+    /// <summary>Коллекция учеников в составе учебных групп.</summary>
+    public DbSet<StudyGroupMember> StudyGroupMembers => Set<StudyGroupMember>();
+    /// <summary>Коллекция курсов, назначенных учебным группам.</summary>
+    public DbSet<StudyGroupCourse> StudyGroupCourses => Set<StudyGroupCourse>();
+    /// <summary>Коллекция кодов-приглашений в учебные группы.</summary>
+    public DbSet<StudyGroupInvitation> StudyGroupInvitations => Set<StudyGroupInvitation>();
 
     /// <summary>
     /// Единые настройки JSON-сериализации для всех операций с JSON в БД.

@@ -13,6 +13,7 @@ import { DictionaryPage, WordPage } from './pages/DictionaryPage'
 import { GrammarPage } from './pages/GrammarPage'
 import { LoginPage } from './pages/LoginPage'
 import { MyWordsPage } from './pages/MyWordsPage'
+import { MyGroupsPage } from './pages/MyGroupsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PracticePage } from './pages/PracticePage'
 import { RegisterPage } from './pages/RegisterPage'
@@ -100,6 +101,7 @@ export default function App() {
                 <Route path="dictionary" element={<DictionaryPage />} />
                 <Route path="dictionary/:wordId" element={<WordPage />} />
                 <Route path="my-words" element={<MyWordsPage />} />
+        <Route path="groups" element={<MyGroupsPage />} />
                 <Route path="practice" element={<PracticePage />} />
                 <Route path="practice/session" element={<ReviewSessionPage />} />
                 <Route path="*" element={<NotFoundPage />} />

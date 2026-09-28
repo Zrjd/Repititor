@@ -12,6 +12,12 @@ paths:
     get:
       tags:
       - Admin
+      summary: 'Возвращает агрегированную статистику платформы для панели администратора.
+
+        Включает количество пользователей, активных за 7 дней, контент (курсы, уроки,
+        слова),
+
+        статистику повторений, упражнений и использования ИИ с оценкой стоимости.'
       responses:
         '200':
           description: OK
@@ -26,6 +32,13 @@ paths:
     get:
       tags:
       - Admin
+      summary: 'Возвращает постраничный список пользователей с возможностью поиска
+        по email или имени.
+
+        Поиск нормализует введённый текст для регистронезависимого сравнения.
+
+        Результат включает основные профильные данные: роль, уровень, XP, серию дней
+        и статус аккаунта.'
       parameters:
       - name: Page
         in: query
@@ -62,6 +75,10 @@ paths:
     patch:
       tags:
       - Admin
+      summary: 'Изменяет роль пользователя (например, назначение преподавателя или
+        снятие прав администратора).
+
+        Возвращает 404, если пользователь с указанным идентификатором не найден.'
       parameters:
       - name: id
         in: path
@@ -80,6 +97,11 @@ paths:
     patch:
       tags:
       - Admin
+      summary: 'Активирует или деактивирует аккаунт пользователя.
+
+        Деактивированный пользователь теряет доступ к системе, но его данные сохраняются.
+
+        Возвращает 404, если пользователь не найден.'
       parameters:
       - name: id
         in: path
@@ -99,6 +121,13 @@ paths:
     delete:
       tags:
       - Admin
+      summary: 'Удаляет журналы вызовов ИИ старше указанного количества дней (по умолчанию
+        30).
+
+        Используется для освобождения места в базе данных и соблюдения политики хранения
+        данных.
+
+        Операция необратима — удалённые записи восстановить невозможно.'
       parameters:
       - name: olderThanDays
         in: query
@@ -109,10 +138,666 @@ paths:
       responses:
         '204':
           description: No Content
+  /api/v1/admin/courses:
+    get:
+      tags:
+      - AdminCatalog
+      summary: 'Возвращает список курсов для панели управления, включая неопубликованные.
+
+        Поддерживает фильтрацию по языку и возможность скрыть неопубликованные курсы.
+
+        Включает количество уроков и дату создания для каждого курса.
+
+        Учитель видит только свои курсы, администратор — все.'
+      parameters:
+      - name: languageId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: includeUnpublished
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+    post:
+      tags:
+      - AdminCatalog
+      summary: 'Создаёт новый курс в каталоге.
+
+        Проверяет существование указанного языка перед созданием.
+
+        Курс учителя создаётся в статусе черновика и принадлежит ему.
+
+        Возвращает 201 с данными созданного курса и ссылкой на получение его деталей.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+  /api/v1/admin/courses/{id}:
+    get:
+      tags:
+      - AdminCatalog
+      summary: 'Получает детальную информацию о курсе по идентификатору для редактирования
+        в панели управления.
+
+        Возвращает 404, если курс не найден, и 403, если курс принадлежит другому
+        учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+      - AdminCatalog
+      summary: 'Обновляет параметры существующего курса.
+
+        Поддерживает частичное обновление — изменяются только переданные поля.
+
+        При смене языка проверяет его существование. Возвращает 404, если курс не
+        найден,
+
+        и 403, если курс принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - AdminCatalog
+      summary: 'Удаляет курс из каталога вместе со связанными данными.
+
+        Операция необратима. Возвращает 404, если курс не найден,
+
+        и 403, если курс принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/courses/{id}/publish:
+    post:
+      tags:
+      - AdminCatalog
+      summary: 'Публикует курс или снимает его с публикации.
+
+        Учитель может публиковать только свои курсы, администратор — любые.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: published
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/courses/{id}/lessons:
+    get:
+      tags:
+      - AdminCatalog
+      summary: 'Возвращает список всех уроков указанного курса для управления содержимым.
+
+        Уроки сортируются по порядковому номеру. Включает полные данные каждого урока.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/lessons:
+    post:
+      tags:
+      - AdminCatalog
+      summary: 'Создаёт новый урок в указанном курсе.
+
+        Учитель может создать урок только в своём курсе.
+
+        Возвращает 201 с данными созданного урока и ссылкой на получение его деталей.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/lessons/{id}:
+    get:
+      tags:
+      - AdminCatalog
+      summary: 'Получает детальную информацию об уроке по идентификатору для редактирования.
+
+        Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого
+        учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+      - AdminCatalog
+      summary: 'Обновляет параметры существующего урока.
+
+        Поддерживает частичное обновление — изменяются только переданные поля.
+
+        Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого
+        учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - AdminCatalog
+      summary: 'Удаляет урок из курса.
+
+        Операция необратима. Возвращает 404, если урок не найден,
+
+        и 403, если он принадлежит курсу другого учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/lessons/{id}/generate:
+    post:
+      tags:
+      - AdminCatalog
+      summary: 'Генерирует содержимое урока с помощью ИИ на основе указанной темы,
+        уровня и требований.
+
+        Использует текущие настройки промпта из конфигурации системы.
+
+        Возвращает заголовок, краткое описание, Markdown-контент и ключевую лексику.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateLessonContentRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/GenerateLessonContentRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/GenerateLessonContentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/GenerateLessonContentResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateLessonContentResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/GenerateLessonContentResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/courses/{id}/generate:
+    post:
+      tags:
+      - AdminCatalog
+      summary: 'Генерирует структуру курса с помощью ИИ: описание и список заголовков
+        уроков на основе темы и уровня.
+
+        Позволяет быстро создать каркас курса, который затем можно доработать вручную.
+
+        Возвращает 404, если курс не найден, и 403, если курс принадлежит другому
+        учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseContentRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseContentRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseContentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/GenerateCourseContentResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateCourseContentResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/GenerateCourseContentResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/admin/ai-settings:
+    get:
+      tags:
+      - AdminCatalog
+      summary: 'Возвращает текущие настройки ИИ: провайдеры, модели, температуру,
+        лимиты токенов и промпт для уроков.
+
+        Объединяет значения из конфигурации приложения с переопределениями из базы
+        данных.'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AiSettingsResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSettingsResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AiSettingsResponse'
+    put:
+      tags:
+      - AdminCatalog
+      summary: 'Обновляет настройки ИИ, сохраняя их в базе данных как JSON.
+
+        Поддерживает частичное обновление — изменяются только переданные поля.
+
+        Позволяет настроить провайдеров, модели, температуру, лимиты и промпт для
+        генерации уроков.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAiSettingsRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAiSettingsRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateAiSettingsRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AiSettingsResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSettingsResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AiSettingsResponse'
+  /api/v1/admin/ai-settings/test:
+    post:
+      tags:
+      - AdminCatalog
+      summary: 'Проверяет подключение к указанному провайдеру ИИ, отправляя тестовый
+        запрос.
+
+        Измеряет задержку ответа и возвращает результат с указанием используемой модели.
+
+        При ошибке возвращает 200 с флагом неуспеха и описанием проблемы.'
+      parameters:
+      - name: provider
+        in: query
+        schema:
+          type: string
+      - name: model
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AiTestResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiTestResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AiTestResponse'
   /api/v1/ai/providers:
     get:
       tags:
       - Ai
+      summary: 'Возвращает список всех сконфигурированных провайдеров ИИ с их настройками.
+
+        Позволяет клиенту отображать доступные модели и их возможности (стриминг,
+        JSON-режим, измерения эмбеддингов).
+
+        Доступен без аутентификации, так как информация не содержит секретных данных.'
       responses:
         '200':
           description: OK
@@ -136,6 +821,13 @@ paths:
     post:
       tags:
       - Ai
+      summary: 'Проверяет работоспособность указанного провайдера ИИ, отправляя тестовый
+        запрос.
+
+        Измеряет задержку ответа и возвращает используемую модель.
+
+        При ошибке возвращает 503 с описанием проблемы, что позволяет мониторингу
+        отслеживать состояние сервисов.'
       parameters:
       - name: name
         in: path
@@ -156,6 +848,13 @@ paths:
     get:
       tags:
       - Ai
+      summary: 'Возвращает статистику использования ИИ за указанный период (по умолчанию
+        30 дней).
+
+        Администраторы и преподаватели могут просматривать статистику всех пользователей,
+
+        остальные пользователи видят только свои данные. Включает разбивку по провайдерам
+        и дням.'
       parameters:
       - name: days
         in: query
@@ -185,6 +884,14 @@ paths:
     post:
       tags:
       - Ai
+      summary: 'Пересоздаёт индекс эмбеддингов словаря для полнотекстового и семантического
+        поиска.
+
+        Позволяет указать провайдера, размер пакета и ограничение на количество записей.
+
+        Параметр force принудительно пересоздаёт существующие эмбеддинги.
+
+        Операция глобальная и расходует квоту ИИ, поэтому доступна только администратору.'
       parameters:
       - name: provider
         in: query
@@ -224,6 +931,14 @@ paths:
     get:
       tags:
       - Ai
+      summary: 'Возвращает текущие ограничения системы: лимиты на импорт слов, размер
+        колоды,
+
+        количество бесплатных вызовов ИИ в день, параметры повторений и поддерживаемые
+        типы упражнений.
+
+        Используется клиентом для отображения актуальных ограничений и настройки пользовательского
+        интерфейса.'
       responses:
         '200':
           description: OK
@@ -238,6 +953,17 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Регистрирует нового пользователя в системе.
+
+        Создаёт аккаунт с указанным email и паролем, проверяет уникальность email,
+
+        устанавливает языки по умолчанию и выдаёт пару токенов доступа.
+
+        Роль выбирается при регистрации: ученик или учитель (создаёт собственные курсы);
+
+        роль администратора недоступна для самостоятельной регистрации.
+
+        Также создаёт стартодеку "Мои слова" для нового пользователя.'
       requestBody:
         content:
           application/json:
@@ -290,6 +1016,11 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Аутентифицирует пользователя по email и паролю.
+
+        Проверяет учётные данные, при необходимости перехеширует пароль
+
+        и выдаёт новую пару токенов доступа (access + refresh).'
       requestBody:
         content:
           application/json:
@@ -330,6 +1061,13 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Обновляет пару токенов доступа по refresh-токену.
+
+        Реализует механизм ротации: старый refresh-токен отзывается,
+
+        а пользователь получает новую пару токенов. Это повышает безопасность,
+
+        предотвращая повторное использование скомпрометированных токенов.'
       requestBody:
         content:
           application/json:
@@ -370,6 +1108,11 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Завершает текущую сессию пользователя, отзывая указанный refresh-токен.
+
+        Токен может быть передан в заголовке X-Refresh-Token или в теле запроса.
+
+        Если токен не передан, запрос считается успешным без ошибки.'
       requestBody:
         content:
           application/json:
@@ -388,6 +1131,11 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Завершает все активные сессии пользователя, отзывая все его refresh-токены.
+
+        Используется, например, при подозрении на компрометацию аккаунта
+
+        или при смене пароля для принудительного перелогина на всех устройствах.'
       responses:
         '204':
           description: No Content
@@ -395,6 +1143,13 @@ paths:
     get:
       tags:
       - Auth
+      summary: 'Возвращает профиль текущего аутентифицированного пользователя.
+
+        Содержит информацию о пользователе, включая языки обучения,
+
+        уровень, статистику и настройки. Используется для отображения
+
+        личного кабинета и настроек профиля.'
       responses:
         '200':
           description: OK
@@ -412,6 +1167,11 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Изменяет пароль текущего пользователя.
+
+        Проверяет текущий пароль, валидирует новый на сложность,
+
+        обновляет хеш пароля и отзывает все активные сессии для безопасности.'
       requestBody:
         content:
           application/json:
@@ -442,6 +1202,13 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Инициирует процесс восстановления пароля.
+
+        Генерирует токен сброса с ограниченным сроком действия (2 часа)
+
+        и отправляет письмо со ссылкой на указанный email.
+
+        Всегда возвращает успешный ответ, чтобы не раскрывать существование аккаунта.'
       requestBody:
         content:
           application/json:
@@ -460,6 +1227,13 @@ paths:
     post:
       tags:
       - Auth
+      summary: 'Сбрасывает пароль пользователя по токену восстановления.
+
+        Проверяет валидность и срок действия токена, обновляет пароль
+
+        и отзывает все активные сессии. Токен помечается использованным,
+
+        предотвращая повторное использование.'
       requestBody:
         content:
           application/json:
@@ -490,6 +1264,12 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает список всех доступных языков для обучения.
+
+        Возвращает только включённые языки, отсортированные по порядку отображения
+        и английскому названию.
+
+        Используется для заполнения фильтров и выпадающих списков на клиенте.'
       responses:
         '200':
           description: OK
@@ -513,6 +1293,12 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает информацию о конкретном языке по его коду (например, "en",
+        "de").
+
+        Код приводится к нижнему регистру для регистронезависимого поиска.
+
+        Возвращает 404, если язык с указанным кодом не найден.'
       parameters:
       - name: code
         in: path
@@ -548,6 +1334,14 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает каталог опубликованных курсов с возможностью фильтрации по
+        языку и уровню CEFR.
+
+        Для каждого курса вычисляется прогресс текущего пользователя (процент пройденных
+        уроков),
+
+        что позволяет клиенту отображать персонализированные данные без дополнительных
+        запросов.'
       parameters:
       - name: languageId
         in: query
@@ -581,6 +1375,12 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает детальную информацию о курсе по его читаемому идентификатору
+        (slug).
+
+        В отличие от списка курсов, включает полные данные о прогрессе пользователя.
+
+        Возвращает 404, если курс с указанным slug не найден.'
       parameters:
       - name: slug
         in: path
@@ -616,6 +1416,12 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает список всех опубликованных уроков для указанного курса.
+
+        Для каждого урока возвращается текущий статус прогресса пользователя (начат/завершён,
+        процент выполнения, лучший результат).
+
+        Уроки сортируются по порядковому номеру в курсе.'
       parameters:
       - name: slug
         in: path
@@ -645,6 +1451,12 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает полную информацию об уроке по его уникальному идентификатору.
+
+        Включает содержимое урока в формате Markdown и прогресс пользователя по данному
+        уроку.
+
+        Возвращает 404, если урок не найден.'
       parameters:
       - name: lessonId
         in: path
@@ -681,6 +1493,12 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает список опубликованных грамматических тем с фильтрацией по
+        языку и максимальному уровню CEFR.
+
+        Фильтр по уровню отсеивает темы, минимальный уровень которых выше указанного.
+
+        Темы сортируются по минимальному уровню и названию для удобной навигации.'
       parameters:
       - name: languageId
         in: query
@@ -714,6 +1532,13 @@ paths:
     get:
       tags:
       - Catalog
+      summary: 'Получает детальную информацию о грамматической теме по уникальному
+        идентификатору.
+
+        Включает полное объяснение грамматики в формате Markdown для отображения в
+        учебнике.
+
+        Возвращает 404, если тема не найдена.'
       parameters:
       - name: id
         in: path
@@ -750,6 +1575,12 @@ paths:
     get:
       tags:
       - Decks
+      summary: 'Возвращает список колод текущего пользователя.
+
+        По умолчанию показывает только активные колоды; при includeArchived = true
+        включает и архивные.
+
+        Для каждой колоды подсчитывает количество карточек к повторению, новых и выученных.'
       parameters:
       - name: includeArchived
         in: query
@@ -778,6 +1609,11 @@ paths:
     post:
       tags:
       - Decks
+      summary: 'Создаёт новую колоду карточек.
+
+        В запросе можно указать название, описание, язык, обложку (эмодзи) и теги.
+
+        Также можно сразу передать список слов, которые будут добавлены в колоду.'
       requestBody:
         content:
           application/json:
@@ -806,6 +1642,12 @@ paths:
     get:
       tags:
       - Decks
+      summary: 'Возвращает подробную информацию о конкретной колоде.
+
+        Включает статистику: сколько карточек готово к повторению, сколько новых и
+        сколько уже выучено.
+
+        Используется для страницы просмотра колоды перед началом практики.'
       parameters:
       - name: id
         in: path
@@ -841,6 +1683,12 @@ paths:
     patch:
       tags:
       - Decks
+      summary: 'Обновляет название, описание или другие параметры колоды.
+
+        Обновляются только те поля, которые переданы в запросе.
+
+        Также позволяет архивировать колоду (IsArchived), чтобы скрыть её из списка
+        активных.'
       parameters:
       - name: id
         in: path
@@ -872,9 +1720,26 @@ paths:
             text/json:
               schema:
                 $ref: '#/components/schemas/DeckResponse'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     delete:
       tags:
       - Decks
+      summary: 'Полностью удаляет колоду вместе со всеми связями с карточками.
+
+        Сами слова при этом не удаляются из словаря и личного словаря пользователя.
+
+        Действие необратимо — колоду восстановить будет нельзя.'
       parameters:
       - name: id
         in: path
@@ -889,6 +1754,11 @@ paths:
     get:
       tags:
       - Decks
+      summary: 'Возвращает список карточек (слов) в указанной колоде с пагинацией.
+
+        Карточки сортируются по позиции в колоде (порядку добавления).
+
+        Используется для просмотра содержимого колоды.'
       parameters:
       - name: id
         in: path
@@ -932,6 +1802,13 @@ paths:
     post:
       tags:
       - Decks
+      summary: 'Добавляет слова в существующую колоду.
+
+        Возвращает количество фактически добавленных карточек (без дубликатов) и общий
+        размер колоды.
+
+        Если слово уже есть у пользователя, оно будет привязано к колоде; если нет
+        — будет добавлено в личный словарь.'
       parameters:
       - name: id
         in: path
@@ -964,6 +1841,13 @@ paths:
     delete:
       tags:
       - Decks
+      summary: 'Удаляет карточку из колоды, но не из словаря.
+
+        Слово остаётся в личном словаре пользователя и продолжит участвовать в повторениях,
+        просто исчезнет из этой колоды.
+
+        Используется для наполнения колоды только теми словами, которые пользователь
+        хочет повторять в данном контексте.'
       parameters:
       - name: id
         in: path
@@ -984,6 +1868,12 @@ paths:
     post:
       tags:
       - Decks
+      summary: 'Сбрасывает прогресс изучения всех карточек в колоде.
+
+        Все интервалы, повторения и статистика обнуляются — карточки становятся "новыми"
+        и готовы к повторению с нуля.
+
+        Используется, если пользователь хочет начать изучение колоды заново.'
       parameters:
       - name: id
         in: path
@@ -998,6 +1888,12 @@ paths:
     get:
       tags:
       - Dictionary
+      summary: 'Ищет слова в словаре с фильтрацией и пагинацией.
+
+        Поддерживает два режима: обычный текстовый поиск (по префиксу или вхождению)
+        и семантический поиск (по смыслу через векторные представления).
+
+        Можно фильтровать по уровню сложности, части речи и тегам.'
       parameters:
       - name: Query
         in: query
@@ -1074,6 +1970,12 @@ paths:
     post:
       tags:
       - Dictionary
+      summary: 'Создаёт новое слово в словаре и автоматически добавляет его к пользователю.
+
+        Проверяет на дубликаты — если такое слово уже есть, возвращает ошибку конфликта.
+
+        При необходимости сразу вычисляет векторное представление для семантического
+        поиска.'
       requestBody:
         content:
           application/json:
@@ -1102,6 +2004,11 @@ paths:
     get:
       tags:
       - Dictionary
+      summary: 'Возвращает полную информацию о слове по его идентификатору.
+
+        Включает перевод, транскрипцию, примеры, теги и другие метаданные слова.
+
+        Используется для отображения детальной карточки слова.'
       parameters:
       - name: id
         in: path
@@ -1137,6 +2044,12 @@ paths:
     put:
       tags:
       - Dictionary
+      summary: 'Обновляет информацию о существующем слове в словаре.
+
+        Обновляются только переданные поля; остальные данные остаются без изменений.
+
+        Если изменился текст или перевод, автоматически пересчитывается векторное
+        представление.'
       parameters:
       - name: id
         in: path
@@ -1183,6 +2096,12 @@ paths:
     delete:
       tags:
       - Dictionary
+      summary: 'Удаляет (помечает как устаревшее) слово из словаря.
+
+        Удаление мягкое — слово помечается как Deprecated и скрывается из поиска,
+        но данные сохраняются.
+
+        Удалить слово может только его автор или администратор/учитель.'
       parameters:
       - name: id
         in: path
@@ -1209,6 +2128,12 @@ paths:
     get:
       tags:
       - Dictionary
+      summary: 'Находит слова, близкие по смыслу к заданному слову.
+
+        Использует векторные представления для поиска семантически похожих слов.
+
+        Полезно для расширения словарного запаса — показывает синонимы и слова из
+        той же тематической группы.'
       parameters:
       - name: id
         in: path
@@ -1249,6 +2174,14 @@ paths:
     post:
       tags:
       - Dictionary
+      summary: 'Массово импортирует слова из текста (например, в формате TSV — слово,
+        перевод, транскрипция, пример).
+
+        При импорте проверяются дубликаты: существующие слова обновляются, новые —
+        добавляются.
+
+        Возвращает подробный отчёт: сколько слов добавлено, обновлено, пропущено и
+        сколько строк завершились ошибкой.'
       requestBody:
         content:
           application/json:
@@ -1277,6 +2210,12 @@ paths:
     get:
       tags:
       - Dictionary
+      summary: 'Возвращает слова, которые пользователь добавил в свой личный словарь.
+
+        Можно фильтровать по состоянию карточки (новое, изучается, выучено) и по конкретной
+        колоде.
+
+        Используется для отображения персонального списка изучаемых слов.'
       parameters:
       - name: Page
         in: query
@@ -1318,6 +2257,12 @@ paths:
     post:
       tags:
       - Dictionary
+      summary: 'Добавляет слово из общего словаря в личный словарь пользователя.
+
+        Слово становится доступным для повторений и может быть добавлено в указанную
+        колоду.
+
+        Также можно сохранить личную заметку к слову.'
       parameters:
       - name: lexicalUnitId
         in: path
@@ -1354,6 +2299,11 @@ paths:
     delete:
       tags:
       - Dictionary
+      summary: 'Удаляет слово из личного словаря пользователя.
+
+        Слово перестаёт участвовать в повторениях и удаляется из всех колод пользователя.
+
+        Само слово в общем словаре при этом не удаляется.'
       parameters:
       - name: lexicalUnitId
         in: path
@@ -1368,6 +2318,12 @@ paths:
     get:
       tags:
       - Dictionary
+      summary: 'Возвращает слово дня для текущего пользователя.
+
+        Слово выбирается детерминированно на основе даты и идентификатора пользователя
+        — у всех будет одинаковое слово в течение дня.
+
+        Учитывает целевой язык и уровень владения пользователя.'
       responses:
         '200':
           description: OK
@@ -1385,6 +2341,12 @@ paths:
     post:
       tags:
       - Dictionary
+      summary: 'Генерирует аудиофайл с произношением слова через сервис синтеза речи.
+
+        Аудио сохраняется в базе данных и привязывается к слову, чтобы пользователь
+        мог прослушать правильное произношение.
+
+        Можно выбрать голос синтеза через параметр voice.'
       parameters:
       - name: lexicalUnitId
         in: path
@@ -1399,17 +2361,17 @@ paths:
       responses:
         '200':
           description: OK
-          content:
-            text/plain:
-              schema: {}
-            application/json:
-              schema: {}
-            text/json:
-              schema: {}
   /api/v1/exercises:
     get:
       tags:
       - Exercises
+      summary: 'Возвращает список упражнений с фильтрацией и пагинацией.
+
+        Позволяет фильтровать по типу, курсу, уроку, а также показывать только свои
+        или только опубликованные упражнения.
+
+        Для каждого упражнения включает статистику попыток текущего пользователя (количество
+        и лучший результат).'
       parameters:
       - name: Page
         in: query
@@ -1466,6 +2428,12 @@ paths:
     get:
       tags:
       - Exercises
+      summary: 'Возвращает полную информацию об упражнении по его идентификатору.
+
+        По умолчанию скрывает правильные ответы (includeAnswers = false), чтобы пользователь
+        мог сначала выполнить упражнение.
+
+        Также включает статистику попыток текущего пользователя по этому упражнению.'
       parameters:
       - name: id
         in: path
@@ -1506,6 +2474,12 @@ paths:
     put:
       tags:
       - Exercises
+      summary: 'Обновляет существующее упражнение.
+
+        Изменить упражнение может только его автор или пользователь с правами администратора/учителя.
+
+        Обновляются только те поля, которые переданы в запросе (остальные остаются
+        без изменений).'
       parameters:
       - name: id
         in: path
@@ -1540,6 +2514,12 @@ paths:
     delete:
       tags:
       - Exercises
+      summary: 'Удаляет (деактивирует) упражнение.
+
+        Удаление мягкое — упражнение помечается как неактивное и исчезает из списков,
+        но данные в базе сохраняются.
+
+        Удалить может только автор упражнения; чужие упражнения удалять запрещено.'
       parameters:
       - name: id
         in: path
@@ -1554,6 +2534,13 @@ paths:
     post:
       tags:
       - Exercises
+      summary: 'Генерирует новое упражнение с помощью ИИ на основе заданных параметров.
+
+        Можно указать контекст: конкретные слова, курс, урок или включить векторный
+        контекст для автоматического подбора.
+
+        Сгенерированное упражнение сохраняется в базу данных и возвращается с правильными
+        ответами.'
       requestBody:
         content:
           application/json:
@@ -1594,6 +2581,14 @@ paths:
     post:
       tags:
       - Exercises
+      summary: 'Принимает ответы пользователя на упражнение, проверяет их и сохраняет
+        результат попытки.
+
+        Система оценивает правильность ответов, вычисляет процент успеха и начисляет
+        XP.
+
+        Также обновляет статистику использования упражнения (количество попыток, процент
+        правильных ответов).'
       parameters:
       - name: id
         in: path
@@ -1640,6 +2635,12 @@ paths:
     get:
       tags:
       - Exercises
+      summary: 'Возвращает историю попыток текущего пользователя по конкретному упражнению.
+
+        Показывает прошлые результаты в обратном хронологическом порядке, чтобы пользователь
+        мог отследить свой прогресс.
+
+        Количество записей можно ограничить параметром limit.'
       parameters:
       - name: id
         in: path
@@ -1676,6 +2677,13 @@ paths:
     get:
       tags:
       - Exercises
+      summary: 'Возвращает общую историю всех попыток текущего пользователя по всем
+        упражнениям.
+
+        Используется для страницы "Моя активность" или "История" в профиле пользователя.
+
+        Записи сортируются по дате выполнения (новые сверху), количество ограничено
+        параметром limit.'
       parameters:
       - name: limit
         in: query
@@ -1706,6 +2714,12 @@ paths:
     get:
       tags:
       - Exercises
+      summary: 'Возвращает список рекомендованных упражнений для текущего пользователя.
+
+        Рекомендации учитывают уровень владения пользователя и его прошлые результаты.
+
+        Приоритет отдаётся упражнениям, которые пользователь ещё не пробовал или где
+        результат был ниже 90%.'
       parameters:
       - name: limit
         in: query
@@ -1732,10 +2746,86 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ExerciseSummaryResponse'
+  /api/v1/groups:
+    get:
+      tags:
+      - MyGroups
+      summary: 'Возвращает группы, в которых пользователь состоит учеником,
+
+        с именем учителя и доступными курсами.'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearnerGroupResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearnerGroupResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearnerGroupResponse'
+  /api/v1/groups/join:
+    post:
+      tags:
+      - MyGroups
+      summary: 'Вступает в группу по коду-приглашению и сразу получает курсы группы.
+
+        Возвращает 400, если код отозван, истёк или исчерпал лимит использований.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinGroupRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/JoinGroupRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/JoinGroupRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/LearnerGroupResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearnerGroupResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/LearnerGroupResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /api/v1/practice/due:
     get:
       tags:
       - Practice
+      summary: 'Возвращает карточки, которые готовы к повторению (due cards).
+
+        Используется для начала сессии практики — показывает пользователю, что нужно
+        повторить сейчас.
+
+        Можно фильтровать по конкретной колоде через deckId и ограничивать количество
+        через limit.'
       parameters:
       - name: deckId
         in: query
@@ -1765,6 +2855,12 @@ paths:
     get:
       tags:
       - Practice
+      summary: 'Возвращает количество карточек, готовых к повторению.
+
+        Нужен для отображения счётчика "сколько карточек ждёт повторения" без загрузки
+        самих карточек.
+
+        Полезно для бейджей и уведомлений в интерфейсе.'
       parameters:
       - name: deckId
         in: query
@@ -1785,6 +2881,12 @@ paths:
     get:
       tags:
       - Practice
+      summary: 'Строит прогноз нагрузки на ближайшие 14 дней.
+
+        Показывает, сколько карточек будет готово к повторению каждый день, чтобы
+        пользователь мог спланировать своё время.
+
+        Используется для визуализации расписания повторений в календаре или графике.'
       parameters:
       - name: deckId
         in: query
@@ -1808,6 +2910,13 @@ paths:
     post:
       tags:
       - Practice
+      summary: 'Принимает результаты повторения карточек и обновляет их состояние.
+
+        Сохраняет оценку пользователя, затраченное время и данный ответ для каждой
+        карточки.
+
+        После этого алгоритм интервальных повторений пересчитывает дату следующего
+        показа карточки.'
       requestBody:
         content:
           application/json:
@@ -1842,6 +2951,12 @@ paths:
     post:
       tags:
       - Practice
+      summary: 'Возвращает сводку по завершённой сессии практики.
+
+        Показывает статистику: сколько карточек повторено, сколько правильных ответов,
+        заработано XP и прогноз на 14 дней.
+
+        Используется для экрана результатов после завершения сессии повторения.'
       parameters:
       - name: deckId
         in: query
@@ -1895,6 +3010,13 @@ paths:
     post:
       tags:
       - Practice
+      summary: 'Приостанавливает или возобновляет показ карточки в повторениях.
+
+        Приостановленная карточка не будет появляться в сессиях практики, пока пользователь
+        не снимет приостановку.
+
+        Полезно, когда пользователь хочет временно исключить слово из повторения без
+        удаления.'
       parameters:
       - name: reviewCardId
         in: path
@@ -1914,6 +3036,13 @@ paths:
     post:
       tags:
       - Practice
+      summary: 'Предварительно вычисляет и сохраняет векторные представления (embeddings)
+        для последних добавленных слов пользователя.
+
+        Нужен для ускорения семантического поиска — без предварительного вычисления
+        поиск будет медленным.
+
+        Рекомендуется вызывать после массового импорта слов или добавления новых карточек.'
       parameters:
       - name: limit
         in: query
@@ -1928,6 +3057,13 @@ paths:
     post:
       tags:
       - Speech
+      summary: 'Синтезирует речь из текста (Text-to-Speech).
+
+        Преобразует переданный текст в аудиофайл с выбранным голосом и скоростью.
+
+        Возвращает URL для воспроизведения и метаданные аудио (тип, размер).
+
+        Используется для озвучки слов и фраз при обучении.'
       requestBody:
         content:
           application/json:
@@ -1958,6 +3094,13 @@ paths:
     post:
       tags:
       - Speech
+      summary: 'Распознаёт речь из аудиофайла (Speech-to-Text).
+
+        Принимает аудиозапись, определяет язык и преобразует речь в текст.
+
+        Возвращает полный текст, длительность, сегменты с временными метками
+
+        и уверенностью распознавания. Также сохраняет аудиофайл в хранилище.'
       parameters:
       - name: Language
         in: query
@@ -2026,6 +3169,15 @@ paths:
     post:
       tags:
       - Speech
+      summary: 'Оценивает произношение пользователя по аудиозаписи.
+
+        Сравнивает распознанную речь с целевым текстом и вычисляет оценки
+
+        по нескольким критериям: точность, беглость, полнота, просодия.
+
+        Сохраняет попытку в базу, начисляет XP и возвращает детальный разбор
+
+        с оценками на уровне отдельных слов и подсказками.'
       parameters:
       - name: TargetText
         in: query
@@ -2116,6 +3268,13 @@ paths:
     get:
       tags:
       - Speech
+      summary: 'Возвращает историю попыток оценки произношения текущего пользователя.
+
+        Результат отсортирован по дате (новые сверху), количество ограничивается
+
+        параметром limit (1–200). Используется для просмотра прогресса
+
+        и повторного просмотра результатов предыдущих попыток.'
       parameters:
       - name: limit
         in: query
@@ -2146,6 +3305,13 @@ paths:
     get:
       tags:
       - Speech
+      summary: 'Возвращает список аудиозаписей текущего пользователя.
+
+        Включает все загруженные медиафайлы: записи произношения,
+
+        распознавания речи и другие. Для каждой записи возвращается
+
+        метаданные и временный URL для доступа к файлу.'
       parameters:
       - name: limit
         in: query
@@ -2173,6 +3339,13 @@ paths:
     delete:
       tags:
       - Speech
+      summary: 'Удаляет аудиозапись пользователя по идентификатору.
+
+        Файл удаляется из хранилища и запись из базы данных.
+
+        Доступна только владельцу записи — при попытке удалить чужую
+
+        запись возвращается 404 Not Found.'
       parameters:
       - name: id
         in: path
@@ -2183,10 +3356,1249 @@ paths:
       responses:
         '204':
           description: No Content
+  /api/v1/teacher/courses:
+    get:
+      tags:
+      - Teacher
+      summary: 'Возвращает все курсы учителя, включая черновики.
+
+        Поддерживает фильтрацию по языку и по статусу публикации.'
+      parameters:
+      - name: languageId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: includeUnpublished
+        in: query
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+    post:
+      tags:
+      - Teacher
+      summary: 'Создаёт новый курс учителя.
+
+        Курс создаётся в статусе черновика: опубликовать его можно отдельным запросом.
+
+        Возвращает 201 с данными созданного курса.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+  /api/v1/teacher/courses/{id}:
+    get:
+      tags:
+      - Teacher
+      summary: 'Возвращает курс учителя по идентификатору.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+      - Teacher
+      summary: 'Частично обновляет курс учителя. Статус публикации здесь не меняется
+        —
+
+        для этого есть отдельные действия публикации и снятия с публикации.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - Teacher
+      summary: 'Удаляет курс учителя вместе с его уроками.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/courses/{id}/publish:
+    post:
+      tags:
+      - Teacher
+      summary: 'Публикует курс учителя, делая его доступным всем пользователям каталога.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/courses/{id}/unpublish:
+    post:
+      tags:
+      - Teacher
+      summary: 'Снимает курс учителя с публикации, возвращая его в статус черновика.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminCourseResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/courses/{id}/lessons:
+    get:
+      tags:
+      - Teacher
+      summary: 'Возвращает все уроки курса учителя, включая неопубликованные.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/courses/{courseId}/lessons:
+    post:
+      tags:
+      - Teacher
+      summary: 'Создаёт урок в курсе учителя.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: courseId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateLessonRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/lessons/{id}:
+    get:
+      tags:
+      - Teacher
+      summary: 'Возвращает урок учителя по идентификатору.
+
+        Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого
+        учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+      - Teacher
+      summary: 'Частично обновляет урок учителя.
+
+        Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого
+        учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateLessonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/AdminLessonResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - Teacher
+      summary: 'Удаляет урок из курса учителя.
+
+        Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого
+        учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/lessons/{id}/generate:
+    post:
+      tags:
+      - Teacher
+      summary: 'Генерирует содержимое урока с помощью ИИ по теме, уровню и требованиям
+        учителя.
+
+        Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого
+        учителя.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateLessonContentRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/GenerateLessonContentRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/GenerateLessonContentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/GenerateLessonContentResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateLessonContentResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/GenerateLessonContentResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/courses/{id}/generate:
+    post:
+      tags:
+      - Teacher
+      summary: 'Генерирует структуру курса с помощью ИИ: описание и список заголовков
+        уроков.
+
+        Возвращает 404, если курс не найден, и 403, если он принадлежит другому учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseContentRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseContentRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseContentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/GenerateCourseContentResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateCourseContentResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/GenerateCourseContentResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups:
+    get:
+      tags:
+      - TeacherGroups
+      summary: 'Возвращает группы учителя с количеством участников и курсов.
+
+        Администратор получает все группы платформы.'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudyGroupResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudyGroupResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudyGroupResponse'
+    post:
+      tags:
+      - TeacherGroups
+      summary: 'Создаёт новую группу. Группа из одного участника — это персональные
+        занятия.
+
+        Возвращает 201 с данными созданной группы.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyGroupRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/StudyGroupRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/StudyGroupRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupResponse'
+  /api/v1/teacher/groups/assignable-courses:
+    get:
+      tags:
+      - TeacherGroups
+      summary: 'Возвращает курсы, доступные для назначения группе: собственные курсы
+        учителя
+
+        (включая черновики) и опубликованные системные курсы.'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCourseResponse'
+  /api/v1/teacher/groups/{id}:
+    get:
+      tags:
+      - TeacherGroups
+      summary: 'Возвращает группу с составом, курсами и кодами-приглашениями.
+
+        Возвращает 404, если группа не найдена, и 403, если она принадлежит другому
+        учителю.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      tags:
+      - TeacherGroups
+      summary: Изменяет название и описание группы. Переданные только те поля обновляются.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyGroupUpdateRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/StudyGroupUpdateRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/StudyGroupUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - TeacherGroups
+      summary: 'Удаляет группу вместе с составом, курсами и приглашениями.
+
+        Записи учеников на курсы и их прогресс сохраняются.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups/{id}/members:
+    post:
+      tags:
+      - TeacherGroups
+      summary: 'Добавляет в группу зарегистрированного ученика по email и сразу выдаёт
+        ему курсы группы.
+
+        Повторное добавление не создаёт дублей. Возвращает 404, если ученик не зарегистрирован.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddGroupMemberRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/AddGroupMemberRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/AddGroupMemberRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups/{id}/members/{userId}:
+    delete:
+      tags:
+      - TeacherGroups
+      summary: Исключает ученика из группы. Курсы, которые он уже открыл, остаются
+        у него.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups/{id}/invitations:
+    post:
+      tags:
+      - TeacherGroups
+      summary: 'Создаёт код-приглашение в группу: им может воспользоваться ученик,
+        который ещё не зачислен.
+
+        Срок действия задаётся в днях, лимит использований 0 означает без ограничений.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/GroupInvitationResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupInvitationResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/GroupInvitationResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    get:
+      tags:
+      - TeacherGroups
+      summary: 'Возвращает коды-приглашения группы с их состоянием: активен, отозван
+        или исчерпан.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupInvitationResponse'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupInvitationResponse'
+            text/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupInvitationResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups/{id}/invitations/{invitationId}:
+    delete:
+      tags:
+      - TeacherGroups
+      summary: 'Отзывает код-приглашение: после отзыва ученик не сможет вступить по
+        нему.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: invitationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups/{id}/courses:
+    post:
+      tags:
+      - TeacherGroups
+      summary: 'Назначает группе курс и сразу зачисляет всех участников.
+
+        Доступны собственные курсы учителя и опубликованные системные курсы;
+
+        для остальных возвращается 400.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignGroupCourseRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/AssignGroupCourseRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/AssignGroupCourseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/teacher/groups/{id}/courses/{courseId}:
+    delete:
+      tags:
+      - TeacherGroups
+      summary: Убирает курс из группы. Записи участников на курс и их прогресс сохраняются.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: courseId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/StudyGroupDetailResponse'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /api/v1/tutor/sessions:
     get:
       tags:
       - Tutor
+      summary: 'Возвращает список чат-сессий текущего пользователя.
+
+        По умолчанию исключает архивные сессии. Параметр includeArchived
+
+        позволяет получить все сессии, включая архивированные.
+
+        Результат отсортирован по дате последнего сообщения, максимум 100 записей.'
       parameters:
       - name: includeArchived
         in: query
@@ -2215,6 +4627,13 @@ paths:
     post:
       tags:
       - Tutor
+      summary: 'Создаёт новую чат-сессию с ИИ-репетитором.
+
+        Инициализирует сессию с заданными параметрами: режим общения,
+
+        уровень языка, сценарий и настройки провайдера ИИ.
+
+        Возвращает созданную сессию с кодом 201 Created.'
       requestBody:
         content:
           application/json:
@@ -2243,6 +4662,11 @@ paths:
     get:
       tags:
       - Tutor
+      summary: 'Возвращает конкретную чат-сессию по идентификатору.
+
+        Включает все сообщения сессии. Доступна только владельцу сессии —
+
+        при попытке доступа к чужой сессии возвращается 404 Not Found.'
       parameters:
       - name: sessionId
         in: path
@@ -2278,6 +4702,13 @@ paths:
     patch:
       tags:
       - Tutor
+      summary: 'Переименовывает чат-сессию.
+
+        Позволяет пользователю задать понятное название для сессии,
+
+        чтобы было проще ориентироваться в списке диалогов.
+
+        Возвращает обновлённую сессию с сообщениями.'
       parameters:
       - name: sessionId
         in: path
@@ -2312,6 +4743,11 @@ paths:
     delete:
       tags:
       - Tutor
+      summary: 'Полностью удаляет чат-сессию и все её сообщения.
+
+        Операция необратима — данные удаляются из базы навсегда.
+
+        Доступна только владельцу сессии.'
       parameters:
       - name: sessionId
         in: path
@@ -2326,6 +4762,13 @@ paths:
     get:
       tags:
       - Tutor
+      summary: 'Возвращает историю сообщений указанной чат-сессии.
+
+        Поддерживает пагинацию через параметр before (получение сообщений
+
+        раньше указанной даты) и ограничение количества через limit (1–500).
+
+        Сообщения возвращаются в хронологическом порядке.'
       parameters:
       - name: sessionId
         in: path
@@ -2366,6 +4809,13 @@ paths:
     post:
       tags:
       - Tutor
+      summary: 'Отправляет сообщение в чат-сессию и получает ответ ИИ-репетитора.
+
+        Возвращает пару сообщений (пользователь + ассистент), количество
+
+        использованных токенов, задержку ответа и контекст из словаря (RAG),
+
+        который был использован для формирования ответа.'
       parameters:
       - name: sessionId
         in: path
@@ -2401,6 +4851,13 @@ paths:
     post:
       tags:
       - Tutor
+      summary: 'Отправляет сообщение в чат-сессию и стримит ответ ИИ в реальном времени.
+
+        Использует формат Server-Sent Events (SSE) для передачи частей ответа
+
+        по мере их генерации. События: delta (фрагмент текста), done (полный текст),
+
+        error (сообщение об ошибке). Это создаёт эффект "печатания" в интерфейсе.'
       parameters:
       - name: sessionId
         in: path
@@ -2426,6 +4883,13 @@ paths:
     post:
       tags:
       - Tutor
+      summary: 'Перегенерирует ответ ИИ на указанное сообщение пользователя.
+
+        Полезно, когда пользователь хочет получить альтернативный вариант ответа.
+
+        Заменяет существующее сообщение ассистента новым ответом,
+
+        сохраняя контекст диалога.'
       parameters:
       - name: sessionId
         in: path
@@ -2456,6 +4920,11 @@ paths:
     post:
       tags:
       - Tutor
+      summary: 'Архивирует или разархивирует чат-сессию.
+
+        Архивные сессии скрываются из основного списка, но сохраняются
+
+        в базе данных. Параметр archived=false возвращает сессию в активные.'
       parameters:
       - name: sessionId
         in: path
@@ -2475,6 +4944,11 @@ paths:
     post:
       tags:
       - Tutor
+      summary: 'Сохраняет оценку пользователем ответа ИИ-репетитора.
+
+        Используется для сбора обратной связи о качестве ответов,
+
+        что помогает улучшать систему и анализировать эффективность ИИ.'
       parameters:
       - name: messageId
         in: path
@@ -2500,6 +4974,13 @@ paths:
     get:
       tags:
       - Tutor
+      summary: 'Возвращает статистику использования ИИ-сервисов пользователем.
+
+        Включает количество вызовов, потреблённые токены, оценочную стоимость
+
+        и разбивку по провайдерам и дням. Параметр days определяет период
+
+        анализа (1–365 дней). Помогает контролировать расход ресурсов.'
       parameters:
       - name: days
         in: query
@@ -2524,6 +5005,11 @@ paths:
     get:
       tags:
       - Users
+      summary: 'Возвращает полный профиль текущего аутентифицированного пользователя.
+
+        Включает информацию о языках обучения, уровне, статистике и настройках.
+
+        Используется для отображения личного кабинета и страницы настроек.'
       responses:
         '200':
           description: OK
@@ -2540,6 +5026,13 @@ paths:
     patch:
       tags:
       - Users
+      summary: 'Обновляет настройки профиля текущего пользователя.
+
+        Позволяет изменить отображаемое имя, аватар, языки обучения,
+
+        уровень, дневную цель XP, скорость речи и другие параметры.
+
+        Принимает только переданные поля — остальные остаются без изменений.'
       requestBody:
         content:
           application/json:
@@ -2568,6 +5061,13 @@ paths:
     get:
       tags:
       - Users
+      summary: 'Возвращает агрегированные данные для дашборда пользователя.
+
+        Включает статистику изучения слов, количество карточек к повторению,
+
+        активность за период, рекомендуемые слова и прогресс по дневной цели.
+
+        Параметр activityDays определяет глубину истории (1–90 дней).'
       parameters:
       - name: activityDays
         in: query
@@ -2592,6 +5092,14 @@ paths:
     get:
       tags:
       - Users
+      summary: 'Возвращает ежедневную статистику активности пользователя за указанный
+        период.
+
+        Содержит данные о заработанном XP, количестве повторений, правильных ответах,
+
+        новых словах и времени обучения для каждого дня. Используется для графиков
+
+        и визуализации прогресса обучения.'
       parameters:
       - name: days
         in: query
@@ -2622,16 +5130,16 @@ paths:
     get:
       tags:
       - Users
+      summary: 'Возвращает текущий прогресс по дневной цели XP.
+
+        Показывает, сколько XP заработано сегодня, достигнута ли цель,
+
+        а также текущую и максимальную серию дней подряд (streak).
+
+        Используется для отображения виджета цели на главной странице.'
       responses:
         '200':
           description: OK
-          content:
-            text/plain:
-              schema: {}
-            application/json:
-              schema: {}
-            text/json:
-              schema: {}
 components:
   schemas:
     ActivityResponse:
@@ -2658,6 +5166,106 @@ components:
         minutesStudied:
           type: integer
           format: int32
+      additionalProperties: false
+    AddGroupMemberRequest:
+      required:
+      - email
+      type: object
+      properties:
+        email:
+          maxLength: 320
+          minLength: 0
+          type: string
+          description: Email зарегистрированного ученика; сравнение регистронезависимое.
+          format: email
+      additionalProperties: false
+      description: Добавление ученика в группу по его email.
+    AdminCourseResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        languageId:
+          type: string
+          format: uuid
+        languageCode:
+          type: string
+          nullable: true
+        coverUrl:
+          type: string
+          nullable: true
+        accentColor:
+          type: string
+          nullable: true
+        estimatedMinutes:
+          type: integer
+          format: int32
+        isPublished:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+        lessonsCount:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        ownerDisplayName:
+          type: string
+          nullable: true
+      additionalProperties: false
+    AdminLessonResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        courseId:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        contentMarkdown:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+          format: int32
+        estimatedMinutes:
+          type: integer
+          format: int32
+        isPublished:
+          type: boolean
+        grammarTopicId:
+          type: string
+          format: uuid
+          nullable: true
+        keyVocabulary:
+          type: array
+          items:
+            type: string
+          nullable: true
       additionalProperties: false
     AiProviderResponse:
       type: object
@@ -2694,6 +5302,87 @@ components:
         requestsPerMinute:
           type: integer
           format: int32
+      additionalProperties: false
+    AiProviderSettingsResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        kind:
+          type: string
+          nullable: true
+        baseUrl:
+          type: string
+          nullable: true
+        apiKey:
+          type: string
+          nullable: true
+        chatModel:
+          type: string
+          nullable: true
+        embeddingModel:
+          type: string
+          nullable: true
+        ttsModel:
+          type: string
+          nullable: true
+        sttModel:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        timeoutSeconds:
+          type: integer
+          format: int32
+        requestsPerMinute:
+          type: integer
+          format: int32
+      additionalProperties: false
+    AiSettingsResponse:
+      type: object
+      properties:
+        defaultChatProvider:
+          type: string
+          nullable: true
+        defaultEmbeddingProvider:
+          type: string
+          nullable: true
+        defaultChatModel:
+          type: string
+          nullable: true
+        temperature:
+          type: number
+          format: double
+        maxOutputTokens:
+          type: integer
+          format: int32
+        lessonPrompt:
+          type: string
+          nullable: true
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiProviderSettingsResponse'
+          nullable: true
+      additionalProperties: false
+    AiTestResponse:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+        provider:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        latencyMs:
+          type: integer
+          format: int64
+        error:
+          type: string
+          nullable: true
       additionalProperties: false
     AiUsageByDayResponse:
       type: object
@@ -2765,6 +5454,17 @@ components:
             $ref: '#/components/schemas/AiUsageByDayResponse'
           nullable: true
       additionalProperties: false
+    AssignGroupCourseRequest:
+      required:
+      - courseId
+      type: object
+      properties:
+        courseId:
+          type: string
+          description: 'Курс: собственный курс учителя или опубликованный системный.'
+          format: uuid
+      additionalProperties: false
+      description: Назначение курса группе.
     CardState:
       enum:
       - New
@@ -2940,6 +5640,54 @@ components:
         isEnrolled:
           type: boolean
       additionalProperties: false
+    CreateCourseRequest:
+      required:
+      - languageId
+      - slug
+      - title
+      type: object
+      properties:
+        slug:
+          maxLength: 120
+          minLength: 2
+          type: string
+        title:
+          maxLength: 200
+          minLength: 2
+          type: string
+        description:
+          maxLength: 2000
+          minLength: 0
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        languageId:
+          type: string
+          format: uuid
+        coverUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        accentColor:
+          maxLength: 16
+          minLength: 0
+          type: string
+          nullable: true
+        estimatedMinutes:
+          maximum: 10000
+          minimum: 1
+          type: integer
+          format: int32
+        isPublished:
+          type: boolean
+        sortOrder:
+          maximum: 10000
+          minimum: 0
+          type: integer
+          format: int32
+      additionalProperties: false
     CreateDeckRequest:
       required:
       - name
@@ -2974,6 +5722,71 @@ components:
           items:
             type: string
             format: uuid
+          nullable: true
+      additionalProperties: false
+    CreateInvitationRequest:
+      type: object
+      properties:
+        expiresInDays:
+          maximum: 365
+          minimum: 1
+          type: integer
+          description: Срок действия кода в днях, от 1 до 365.
+          format: int32
+        maxUses:
+          maximum: 1000
+          minimum: 0
+          type: integer
+          description: Сколько учеников могут вступить по коду; 0 — без ограничения.
+          format: int32
+      additionalProperties: false
+      description: Параметры нового кода-приглашения.
+    CreateLessonRequest:
+      required:
+      - courseId
+      - slug
+      - title
+      type: object
+      properties:
+        courseId:
+          type: string
+          format: uuid
+        slug:
+          maxLength: 160
+          minLength: 2
+          type: string
+        title:
+          maxLength: 200
+          minLength: 2
+          type: string
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        contentMarkdown:
+          type: string
+          nullable: true
+        sortOrder:
+          maximum: 10000
+          minimum: 0
+          type: integer
+          format: int32
+        estimatedMinutes:
+          maximum: 10000
+          minimum: 1
+          type: integer
+          format: int32
+        isPublished:
+          type: boolean
+        grammarTopicId:
+          type: string
+          format: uuid
+          nullable: true
+        keyVocabulary:
+          type: array
+          items:
+            type: string
           nullable: true
       additionalProperties: false
     CreateLexicalUnitRequest:
@@ -3457,6 +6270,56 @@ components:
           type: string
           format: email
       additionalProperties: false
+    GenerateCourseContentRequest:
+      type: object
+      properties:
+        topic:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        provider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        model:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        lessonsCount:
+          maximum: 30
+          minimum: 1
+          type: integer
+          format: int32
+      additionalProperties: false
+    GenerateCourseContentResponse:
+      type: object
+      properties:
+        description:
+          type: string
+          nullable: true
+        lessonTitles:
+          type: array
+          items:
+            type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+      additionalProperties: false
     GenerateExerciseRequest:
       required:
       - type
@@ -3503,6 +6366,73 @@ components:
         useVectorContext:
           type: boolean
       additionalProperties: false
+    GenerateLessonContentRequest:
+      type: object
+      properties:
+        topic:
+          maxLength: 200
+          minLength: 0
+          type: string
+          nullable: true
+        provider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        model:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        requirements:
+          maxLength: 2000
+          minLength: 0
+          type: string
+          nullable: true
+        durationMinutes:
+          maximum: 180
+          minimum: 5
+          type: integer
+          format: int32
+          nullable: true
+        summary:
+          maxLength: 500
+          minLength: 0
+          type: string
+          nullable: true
+      additionalProperties: false
+    GenerateLessonContentResponse:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        contentMarkdown:
+          type: string
+          nullable: true
+        keyVocabulary:
+          type: array
+          items:
+            type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+      additionalProperties: false
     GrammarTopicResponse:
       type: object
       properties:
@@ -3525,6 +6455,30 @@ components:
           type: string
           nullable: true
       additionalProperties: false
+    GroupInvitationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        maxUses:
+          type: integer
+          format: int32
+        usedCount:
+          type: integer
+          format: int32
+        isRevoked:
+          type: boolean
+        isActive:
+          type: boolean
+      additionalProperties: false
+      description: Код-приглашение в группу.
     ImportWordsRequest:
       required:
       - text
@@ -3586,6 +6540,18 @@ components:
             type: string
           nullable: true
       additionalProperties: false
+    JoinGroupRequest:
+      required:
+      - code
+      type: object
+      properties:
+        code:
+          maxLength: 16
+          minLength: 6
+          type: string
+          description: Код-приглашение, выданный учителем.
+      additionalProperties: false
+      description: Вступление в группу по коду-приглашению.
     JsonNode:
       type: object
       properties:
@@ -3626,6 +6592,31 @@ components:
         isEnabled:
           type: boolean
       additionalProperties: false
+    LearnerGroupResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        teacherDisplayName:
+          type: string
+          nullable: true
+        membersCount:
+          type: integer
+          format: int32
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudyGroupCourseResponse'
+          nullable: true
+      additionalProperties: false
+      description: 'Группа глазами ученика: учитель и доступные курсы.'
     LessonResponse:
       type: object
       properties:
@@ -3986,6 +6977,8 @@ components:
         dailyGoalXp:
           type: integer
           format: int32
+        role:
+          $ref: '#/components/schemas/UserRole'
       additionalProperties: false
     ReindexResponse:
       type: object
@@ -4181,6 +7174,145 @@ components:
         useDictionary:
           type: boolean
       additionalProperties: false
+    StudyGroupCourseResponse:
+      type: object
+      properties:
+        courseId:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        languageCode:
+          type: string
+          nullable: true
+        isPublished:
+          type: boolean
+        isOwnCourse:
+          type: boolean
+        assignedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+      description: Курс, доступный группе.
+    StudyGroupDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        teacherUserId:
+          type: string
+          format: uuid
+        isPersonal:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudyGroupMemberResponse'
+          nullable: true
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudyGroupCourseResponse'
+          nullable: true
+        invitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupInvitationResponse'
+          nullable: true
+      additionalProperties: false
+      description: Полное состояние группы для кабинета учителя.
+    StudyGroupMemberResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        joinedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+      description: Ученик в составе группы.
+    StudyGroupRequest:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          maxLength: 160
+          minLength: 1
+          type: string
+          description: 'Название группы: для персональных занятий обычно имя ученика.'
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: 'Необязательное описание: цель, расписание, уровень.'
+          nullable: true
+      additionalProperties: false
+      description: Запрос на создание или переименование учебной группы.
+    StudyGroupResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        membersCount:
+          type: integer
+          format: int32
+        coursesCount:
+          type: integer
+          format: int32
+        isPersonal:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+      description: Краткая карточка учебной группы в списке учителя.
+    StudyGroupUpdateRequest:
+      type: object
+      properties:
+        name:
+          maxLength: 160
+          minLength: 1
+          type: string
+          nullable: true
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+      additionalProperties: false
+      description: 'Частичное обновление группы: null означает «поле не передано».'
     SubmitExerciseRequest:
       type: object
       properties:
@@ -4312,6 +7444,157 @@ components:
       - Interview
       - Travel
       type: string
+    UpdateAiProviderRequest:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          maxLength: 64
+          minLength: 0
+          type: string
+        kind:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        baseUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        apiKey:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        chatModel:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        embeddingModel:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        ttsModel:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        sttModel:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          nullable: true
+        timeoutSeconds:
+          maximum: 600
+          minimum: 5
+          type: integer
+          format: int32
+          nullable: true
+        requestsPerMinute:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+          nullable: true
+      additionalProperties: false
+    UpdateAiSettingsRequest:
+      type: object
+      properties:
+        defaultChatProvider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        defaultEmbeddingProvider:
+          maxLength: 64
+          minLength: 0
+          type: string
+          nullable: true
+        defaultChatModel:
+          maxLength: 128
+          minLength: 0
+          type: string
+          nullable: true
+        temperature:
+          maximum: 2
+          minimum: 0
+          type: number
+          format: double
+          nullable: true
+        maxOutputTokens:
+          maximum: 8000
+          minimum: 64
+          type: integer
+          format: int32
+          nullable: true
+        lessonPrompt:
+          maxLength: 8000
+          minLength: 0
+          type: string
+          nullable: true
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateAiProviderRequest'
+          nullable: true
+      additionalProperties: false
+    UpdateCourseRequest:
+      type: object
+      properties:
+        slug:
+          maxLength: 120
+          minLength: 2
+          type: string
+          nullable: true
+        title:
+          maxLength: 200
+          minLength: 2
+          type: string
+          nullable: true
+        description:
+          maxLength: 2000
+          minLength: 0
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        languageId:
+          type: string
+          format: uuid
+          nullable: true
+        coverUrl:
+          maxLength: 512
+          minLength: 0
+          type: string
+          nullable: true
+        accentColor:
+          maxLength: 16
+          minLength: 0
+          type: string
+          nullable: true
+        estimatedMinutes:
+          maximum: 10000
+          minimum: 1
+          type: integer
+          format: int32
+          nullable: true
+        isPublished:
+          type: boolean
+          nullable: true
+        sortOrder:
+          maximum: 10000
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+      additionalProperties: false
     UpdateDeckRequest:
       type: object
       properties:
@@ -4388,6 +7671,52 @@ components:
           nullable: true
         isActive:
           type: boolean
+          nullable: true
+      additionalProperties: false
+    UpdateLessonRequest:
+      type: object
+      properties:
+        slug:
+          maxLength: 160
+          minLength: 2
+          type: string
+          nullable: true
+        title:
+          maxLength: 200
+          minLength: 2
+          type: string
+          nullable: true
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          nullable: true
+        contentMarkdown:
+          type: string
+          nullable: true
+        sortOrder:
+          maximum: 10000
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+        estimatedMinutes:
+          maximum: 10000
+          minimum: 1
+          type: integer
+          format: int32
+          nullable: true
+        isPublished:
+          type: boolean
+          nullable: true
+        grammarTopicId:
+          type: string
+          format: uuid
+          nullable: true
+        keyVocabulary:
+          type: array
+          items:
+            type: string
           nullable: true
       additionalProperties: false
     UpdateLexicalUnitRequest:
@@ -4733,13 +8062,40 @@ security:
 - {}
 tags:
 - name: Admin
+  description: 'Платформенные административные операции: статистика, управление пользователями
+    и очистка журналов ИИ.
+
+    Доступно только администратору: роль учителя ограничена собственными курсами и
+    уроками.'
+- name: AdminCatalog
 - name: Ai
 - name: Auth
 - name: Catalog
 - name: Decks
 - name: Dictionary
 - name: Exercises
+- name: MyGroups
+  description: 'Группы ученика: список групп, в которых он занимается, и вступление
+    по коду-приглашению.
+
+    Курсы группы выдаются ученику сразу при вступлении, отдельная запись не требуется.'
 - name: Practice
 - name: Speech
+- name: Teacher
+  description: 'Кабинет учителя: собственные курсы и уроки.
+
+    Все операции работают только с материалами текущего учителя — чужие курсы и уроки
+
+    возвращают 403, администратору доступны все курсы.'
+- name: TeacherGroups
+  description: 'Учебные группы учителя: набор учеников (в том числе группа из одного
+    ученика —
+
+    персональные занятия) и курсы, доступные участникам группы.
+
+    Назначение курса сразу зачисляет всех участников, поэтому отдельная запись ученика
+    не нужна.
+
+    Чужие группы возвращают 403, администратору доступны все.'
 - name: Tutor
 - name: Users

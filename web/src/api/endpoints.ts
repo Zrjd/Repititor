@@ -14,7 +14,9 @@ import type {
   GenerateLessonContent,
   GoalProgress,
   GrammarTopic,
+  GroupInvitation,
   Language,
+  LearnerGroup,
   Lesson,
   LessonSummary,
   LexicalUnit,
@@ -25,6 +27,8 @@ import type {
   ReviewResult,
   SimilarWord,
   SignupRole,
+  StudyGroup,
+  StudyGroupDetail,
   UserProfile,
   UserWord,
   WordOfTheDay,
@@ -173,6 +177,35 @@ export const adminApi = {
     }>
   }) => api.put<AiSettings>('/admin/ai-settings', data),
   testAi: (provider?: string) => api.post<{ healthy: boolean; provider: string; latencyMs: number; error?: string }>('/admin/ai-settings/test', { provider }),
+}
+
+export const teacherApi = {
+  groups: () => api.get<StudyGroup[]>('/teacher/groups'),
+  group: (id: string) => api.get<StudyGroupDetail>(`/teacher/groups/${id}`),
+  createGroup: (data: { name: string; description?: string }) =>
+    api.post<StudyGroup>('/teacher/groups', data),
+  updateGroup: (id: string, data: { name?: string; description?: string }) =>
+    api.patch<StudyGroup>(`/teacher/groups/${id}`, data),
+  deleteGroup: (id: string) => api.delete<void>(`/teacher/groups/${id}`),
+  addMember: (id: string, email: string) =>
+    api.post<StudyGroupDetail>(`/teacher/groups/${id}/members`, { email }),
+  removeMember: (id: string, userId: string) =>
+    api.delete<StudyGroupDetail>(`/teacher/groups/${id}/members/${userId}`),
+  assignableCourses: () => api.get<AdminCourse[]>('/teacher/groups/assignable-courses'),
+  assignCourse: (id: string, courseId: string) =>
+    api.post<StudyGroupDetail>(`/teacher/groups/${id}/courses`, { courseId }),
+  unassignCourse: (id: string, courseId: string) =>
+    api.delete<StudyGroupDetail>(`/teacher/groups/${id}/courses/${courseId}`),
+  invitations: (id: string) => api.get<GroupInvitation[]>(`/teacher/groups/${id}/invitations`),
+  createInvitation: (id: string, data: { expiresInDays: number; maxUses: number }) =>
+    api.post<GroupInvitation>(`/teacher/groups/${id}/invitations`, data),
+  revokeInvitation: (id: string, invitationId: string) =>
+    api.delete<void>(`/teacher/groups/${id}/invitations/${invitationId}`),
+}
+
+export const groupsApi = {
+  mine: () => api.get<LearnerGroup[]>('/groups'),
+  join: (code: string) => api.post<LearnerGroup>('/groups/join', { code }),
 }
 
 export type { ReviewCard }

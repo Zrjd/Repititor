@@ -4,9 +4,13 @@
 Префикс: `/api/v1`. Аутентификация: `Authorization: Bearer <accessToken>`.
 Полные схемы: Swagger UI (`/swagger`) или `GET /swagger/v1/swagger.json`.
 
-Без токена доступны только `GET /catalog/*` (языки, курсы, уроки, грамматика),
-`GET /ai/providers`, `POST /auth/*` и health. Остальные разделы требуют JWT.
-`/admin/*` дополнительно требует роль `Admin` или `Teacher` (иначе 403).
+Без токена доступны `GET /catalog/*` (языки, курсы, уроки, грамматика), `GET /ai/providers`,
+`POST /ai/providers/{name}/health`, `GET /ai/limits`, `POST /auth/*` и health.
+Остальные разделы требуют JWT. `/teacher/*` и `/teacher/groups/*` требуют роль `Teacher`
+или `Admin` (иначе 403). `/admin/courses` и `/admin/lessons` — роль `Admin` или `Teacher`
+с проверкой владения, чужой курс недоступен. Остальные `/admin/*` (пользователи, статистика,
+AI-настройки, AI-логи) и `POST /ai/dictionary/reindex` доступны только `Admin`: там
+хранятся ключи провайдеров и административная статистика.
 
 Ограничение: 300 запросов/мин на IP. Ошибки — ProblemDetails:
 `{ "type", "title", "status", "detail", "instance", "errors" }`.
@@ -120,6 +124,60 @@ dailyGoalXp, speechRate, totalXp, currentStreak, longestStreak, emailConfirmed, 
 | GET | `/speech/pronunciation/attempts`, `/speech/recordings` | история |
 | DELETE | `/speech/recordings/{id}` | удалить запись |
 
+## teacher (Teacher, Admin)
+
+Собственные курсы и уроки. Курс создаётся черновиком и попадает в публичный каталог
+только после публикации. Чужой курс или урок недоступны: 404, либо 403 при известном id.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET | `/teacher/courses?languageId=&includeUnpublished=` | свои курсы, включая черновики |
+| POST | `/teacher/courses` | создать курс (черновик) → 201 + курс |
+| GET | `/teacher/courses/{id}` | данные курса для редактирования |
+| PUT | `/teacher/courses/{id}` | частичное обновление; статус публикации здесь не меняется |
+| POST | `/teacher/courses/{id}/publish` | публикация курса |
+| POST | `/teacher/courses/{id}/unpublish` | снятие с публикации (возврат в черновики) |
+| DELETE | `/teacher/courses/{id}` | удалить курс вместе с уроками |
+| GET | `/teacher/courses/{id}/lessons` | уроки курса, включая неопубликованные |
+| POST | `/teacher/courses/{courseId}/lessons` | создать урок в своём курсе |
+| GET | `/teacher/lessons/{id}` | данные урока для редактирования |
+| PUT | `/teacher/lessons/{id}` | частичное обновление урока |
+| DELETE | `/teacher/lessons/{id}` | удалить урок |
+| POST | `/teacher/lessons/{id}/generate` | генерация содержания урока через ИИ |
+| POST | `/teacher/courses/{id}/generate` | генерация описания и плана уроков курса через ИИ |
+
+## groups (учебные группы)
+
+Учитель набирает учеников по email или по коду-приглашению и назначает группе курсы.
+Назначение курса сразу зачисляет всех участников; новые участники получают те же курсы.
+Группа из одного участника — персональные занятия. Записи на курсы и прогресс учеников
+не отзываются при исключении из группы, снятии курса или удалении группы.
+
+### teacher/groups (Teacher, Admin)
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET | `/teacher/groups` | свои группы с числом участников и курсов; администратор — все |
+| POST | `/teacher/groups` | создать группу: `name`, `description` → 201 |
+| GET | `/teacher/groups/assignable-courses` | курсы для назначения: свои (включая черновики) и опубликованные системные |
+| GET | `/teacher/groups/{id}` | группа с составом, курсами и кодами-приглашениями |
+| PATCH | `/teacher/groups/{id}` | изменить `name` и `description` |
+| DELETE | `/teacher/groups/{id}` | удалить группу вместе с составом, курсами и приглашениями |
+| POST | `/teacher/groups/{id}/members` | добавить зарегистрированного ученика по `email`; 404, если ученик не найден; повтор не создаёт дубль |
+| DELETE | `/teacher/groups/{id}/members/{userId}` | исключить ученика; уже открытые им курсы остаются |
+| POST | `/teacher/groups/{id}/invitations` | код-приглашение: `expiresInDays` (1–365), `maxUses` (0 — без ограничений) |
+| GET | `/teacher/groups/{id}/invitations` | коды группы: активен / отозван / истёк / исчерпан |
+| DELETE | `/teacher/groups/{id}/invitations/{invitationId}` | отозвать код (204) |
+| POST | `/teacher/groups/{id}/courses` | назначить курс (`courseId`) и зачислить участников; для чужого или неопубликованного системного — 400 |
+| DELETE | `/teacher/groups/{id}/courses/{courseId}` | убрать курс из группы; записи и прогресс сохраняются |
+
+### groups (любой авторизованный)
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET | `/groups` | группы, где пользователь состоит учеником: учитель, число участников, курсы |
+| POST | `/groups/join` | вступить по `code` и получить курсы группы; 400 — код отозван, истёк или исчерпан |
+
 ## ai
 
 | Метод | Путь | Назначение |
@@ -130,15 +188,41 @@ dailyGoalXp, speechRate, totalXp, currentStreak, longestStreak, emailConfirmed, 
 | GET | `/ai/limits` | квоты и rate limits |
 | POST | `/ai/dictionary/reindex` | пересчёт embeddings (Admin) |
 
-## admin (Admin, Teacher)
+## admin
+
+### Пользователи, статистика и ИИ (только Admin)
 
 | Метод | Путь | Назначение |
 | --- | --- | --- |
 | GET | `/admin/stats` | сводка: пользователи, контент, активность, AI-расход |
 | GET | `/admin/users?query=&page=&pageSize=` | пользователи |
 | PATCH | `/admin/users/{id}/role?role=` | смена роли |
-| PATCH | `/admin/users/{id}/active?isActive=` | блокировка/разблокировка |
-| DELETE | `/admin/ai-logs` | очистка AI-логов |
+| PATCH | `/admin/users/{id}/active?active=` | блокировка/разблокировка |
+| GET | `/admin/ai-settings` | провайдеры, модели, температура, лимиты, промпт уроков |
+| PUT | `/admin/ai-settings` | частичное обновление; сохраняется в `app_settings` |
+| POST | `/admin/ai-settings/test?provider=&model=` | проверка подключения с замером задержки |
+| DELETE | `/admin/ai-logs?olderThanDays=` | удалить записи журнала старше N дней (по умолчанию 30) |
+
+### Курсы и уроки (Admin, Teacher)
+
+Учитель видит и изменяет только свои курсы и уроки, администратор — все. Поля публикации
+управляются отдельным запросом `publish`, а не через `PUT`.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET | `/admin/courses?languageId=&includeUnpublished=` | курсы панели управления, включая неопубликованные |
+| POST | `/admin/courses` | создать курс (черновик) → 201 |
+| GET | `/admin/courses/{id}` | курс для редактирования |
+| PUT | `/admin/courses/{id}` | частичное обновление курса |
+| DELETE | `/admin/courses/{id}` | удалить курс |
+| POST | `/admin/courses/{id}/publish?published=` | публикация или снятие с публикации |
+| GET | `/admin/courses/{id}/lessons` | уроки курса |
+| POST | `/admin/lessons` | создать урок (`courseId`) |
+| GET | `/admin/lessons/{id}` | урок для редактирования |
+| PUT | `/admin/lessons/{id}` | частичное обновление урока |
+| DELETE | `/admin/lessons/{id}` | удалить урок |
+| POST | `/admin/lessons/{id}/generate` | генерация содержания урока через ИИ |
+| POST | `/admin/courses/{id}/generate` | генерация описания и плана уроков курса через ИИ |
 
 ## Служебные
 

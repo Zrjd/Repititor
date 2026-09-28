@@ -6,8 +6,9 @@ import { adminApi, catalogApi } from '../api/endpoints'
 import type { AdminCourse, AdminLesson, CefrLevel } from '../api/types'
 import { ErrorState, Spinner } from '../components/Feedback'
 import { PageHeader } from '../components/PageHeader'
+import { GroupsTab } from './GroupsTab'
 
-type Tab = 'courses' | 'lessons' | 'ai'
+type Tab = 'courses' | 'lessons' | 'groups' | 'ai'
 
 export function AdminPage() {
   const { t } = useI18n()
@@ -20,7 +21,7 @@ export function AdminPage() {
     <>
       <PageHeader title={t('admin.title')} subtitle={t('admin.subtitle')} />
       <div className="admin-tabs">
-        {(['courses', 'lessons', 'ai'] as Tab[])
+        {(['courses', 'lessons', 'groups', 'ai'] as Tab[])
           .filter((key) => key !== 'ai' || isAdmin)
           .map((key) => (
             <button
@@ -29,12 +30,13 @@ export function AdminPage() {
               className={`admin-tab${tab === key ? ' admin-tab--active' : ''}`}
               onClick={() => setTab(key)}
             >
-              {t(`admin.tab${key.charAt(0).toUpperCase() + key.slice(1)}` as 'admin.tabCourses')}
+              {key === 'groups' ? t('groups.tabGroups') : t(`admin.tab${key.charAt(0).toUpperCase() + key.slice(1)}` as 'admin.tabCourses')}
             </button>
           ))}
       </div>
       {tab === 'courses' ? <CoursesTab /> : null}
       {tab === 'lessons' ? <LessonsTab /> : null}
+      {tab === 'groups' ? <GroupsTab /> : null}
       {tab === 'ai' && isAdmin ? <AiTab /> : null}
     </>
   )

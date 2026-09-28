@@ -20,6 +20,7 @@ export function Layout() {
     { to: '/grammar', labelKey: 'nav.grammar' },
     { to: '/dictionary', labelKey: 'nav.dictionary' },
     { to: '/my-words', labelKey: 'nav.myWords' },
+    { to: '/groups', labelKey: 'nav.myGroups' },
     { to: '/practice', labelKey: 'nav.practice' },
   ]
 

@@ -275,6 +275,66 @@ export interface AdminCourse {
   sortOrder: number
   lessonsCount: number
   createdAt: string
+  ownerDisplayName?: string | null
+}
+
+export interface StudyGroup {
+  id: string
+  name: string
+  description?: string | null
+  membersCount: number
+  coursesCount: number
+  isPersonal: boolean
+  createdAt: string
+}
+
+export interface StudyGroupMember {
+  userId: string
+  displayName: string
+  email: string
+  joinedAt: string
+}
+
+export interface StudyGroupCourse {
+  courseId: string
+  slug: string
+  title: string
+  level: CefrLevel
+  languageCode: string
+  isPublished: boolean
+  isOwnCourse: boolean
+  assignedAt: string
+}
+
+export interface GroupInvitation {
+  id: string
+  code: string
+  expiresAt: string
+  maxUses: number
+  usedCount: number
+  isRevoked: boolean
+  isActive: boolean
+}
+
+export interface StudyGroupDetail {
+  id: string
+  name: string
+  description?: string | null
+  teacherUserId: string
+  isPersonal: boolean
+  createdAt: string
+  members: StudyGroupMember[]
+  courses: StudyGroupCourse[]
+  invitations: GroupInvitation[]
+}
+
+export interface LearnerGroup {
+  id: string
+  name: string
+  description?: string | null
+  teacherDisplayName: string
+  membersCount: number
+  courses: StudyGroupCourse[]
 }
 
 export interface AdminLesson {

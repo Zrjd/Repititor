@@ -340,3 +340,104 @@ public sealed record MediaAssetItem(
     DateTimeOffset CreatedAt,
     DateTimeOffset? ExpiresAt,
     string Url);
+
+/// <summary>Статус операции над учебной группой.</summary>
+public enum GroupMutationStatus
+{
+    /// <summary>Операция выполнена.</summary>
+    Ok,
+
+    /// <summary>Группа, участник или курс не найден — ответ 404.</summary>
+    NotFound,
+
+    /// <summary>Группа принадлежит другому учителю — ответ 403.</summary>
+    Forbidden,
+
+    /// <summary>Курс недоступен для назначения группе — ответ 400.</summary>
+    InvalidCourse,
+
+    /// <summary>Код-приглашение недействительно — ответ 400.</summary>
+    InvalidInvitation
+}
+
+/// <summary>Результат операции над учебной группой: что-то, ошибка или запрет доступа.</summary>
+public sealed record GroupMutationResult<T>(GroupMutationStatus Status, T? Value)
+{
+    /// <summary>Результат без значения, когда операция завершилась успешно.</summary>
+    public static GroupMutationResult<T> Ok(T value) => new(GroupMutationStatus.Ok, value);
+
+    /// <summary>Результат с признаком «объект не найден».</summary>
+    public static GroupMutationResult<T> NotFound() => new(GroupMutationStatus.NotFound, default);
+
+    /// <summary>Результат с признаком «нет прав на операцию».</summary>
+    public static GroupMutationResult<T> Forbidden() => new(GroupMutationStatus.Forbidden, default);
+
+    /// <summary>Результат с признаком «курс нельзя назначить этой группе».</summary>
+    public static GroupMutationResult<T> InvalidCourse() => new(GroupMutationStatus.InvalidCourse, default);
+
+    /// <summary>Результат с признаком «код-приглашение недействительно».</summary>
+    public static GroupMutationResult<T> InvalidInvitation() => new(GroupMutationStatus.InvalidInvitation, default);
+}
+
+/// <summary>Краткая карточка группы для списка учителя.</summary>
+public sealed record StudyGroupItem(
+    Guid Id,
+    string Name,
+    string? Description,
+    int MembersCount,
+    int CoursesCount,
+    bool IsPersonal,
+    DateTimeOffset CreatedAt);
+
+/// <summary>Ученик в составе группы.</summary>
+public sealed record StudyGroupMemberItem(
+    Guid UserId,
+    string DisplayName,
+    string Email,
+    DateTimeOffset JoinedAt);
+
+/// <summary>Курс, доступный группе.</summary>
+public sealed record StudyGroupCourseItem(
+    Guid CourseId,
+    string Slug,
+    string Title,
+    string Level,
+    string LanguageCode,
+    bool IsPublished,
+    bool IsOwnCourse,
+    DateTimeOffset AssignedAt);
+
+/// <summary>Полное состояние группы: состав, курсы и коды-приглашения.</summary>
+public sealed record StudyGroupDetail(
+    Guid Id,
+    string Name,
+    string? Description,
+    Guid TeacherUserId,
+    bool IsPersonal,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<StudyGroupMemberItem> Members,
+    IReadOnlyList<StudyGroupCourseItem> Courses,
+    IReadOnlyList<GroupInvitationItem> Invitations);
+
+/// <summary>Код-приглашение в группу.</summary>
+public sealed record GroupInvitationItem(
+    Guid Id,
+    string Code,
+    DateTimeOffset ExpiresAt,
+    int MaxUses,
+    int UsedCount,
+    bool IsRevoked,
+    bool IsActive);
+
+/// <summary>Группа глазами ученика: её учитель и доступные курсы.</summary>
+public sealed record LearnerGroupItem(
+    Guid Id,
+    string Name,
+    string? Description,
+    string TeacherDisplayName,
+    int MembersCount,
+    IReadOnlyList<StudyGroupCourseItem> Courses);
+
+/// <summary>Частичное обновление группы: null означает «поле не передано, оставить как есть».</summary>
+public sealed record StudyGroupUpdate(string? Name, string? Description);
+
