@@ -18,8 +18,14 @@ public interface IAiGateway
     ISpeechRecognitionClient? ResolveSpeechRecognition(string? provider = null);
     Task<AiChatResult> CompleteAsync(AiChatRequest request, AiOperation operation, Guid? userId, string? provider = null, CancellationToken ct = default);
     Task<JsonNode> CompleteJsonAsync(JsonNode schemaHint, string systemPrompt, string userPrompt, AiOperation operation, Guid? userId, string? provider = null, double? temperature = null, CancellationToken ct = default);
+    Task<AiJsonResult> CompleteJsonWithUsageAsync(JsonNode schemaHint, string systemPrompt, string userPrompt, AiOperation operation, Guid? userId, string? provider = null, double? temperature = null, CancellationToken ct = default);
     Task<AiEmbeddingResult> EmbedAsync(IReadOnlyList<string> inputs, string? provider = null, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Разобранный JSON-ответ модели вместе с числом токенов prompt'а и ответа.
+/// </summary>
+public sealed record AiJsonResult(JsonNode Json, int InputTokens, int OutputTokens);
 
 public sealed class AiGateway : IAiGateway
 {
@@ -140,6 +146,26 @@ public sealed class AiGateway : IAiGateway
         double? temperature = null,
         CancellationToken ct = default)
     {
+        var result = await CompleteJsonWithUsageAsync(
+            schemaHint, systemPrompt, userPrompt, operation, userId, provider, temperature, ct);
+        return result.Json;
+    }
+
+    /// <summary>
+    /// Выполняет запрос к модели чата с требованием вернуть JSON по указанной схеме.
+    /// В отличие от CompleteJsonAsync возвращает также число входных и выходных токенов,
+    /// чтобы вызывающий код мог показать реальное потребление.
+    /// </summary>
+    public async Task<AiJsonResult> CompleteJsonWithUsageAsync(
+        JsonNode schemaHint,
+        string systemPrompt,
+        string userPrompt,
+        AiOperation operation,
+        Guid? userId,
+        string? provider = null,
+        double? temperature = null,
+        CancellationToken ct = default)
+    {
         var prompt = BuildJsonPrompt(systemPrompt, schemaHint, userPrompt);
         var request = new AiChatRequest
         {
@@ -156,7 +182,7 @@ public sealed class AiGateway : IAiGateway
         }
 
         var result = await CompleteAsync(request, operation, userId, provider, ct);
-        return AiJson.Extract(result.Content);
+        return new AiJsonResult(AiJson.Extract(result.Content), result.InputTokens, result.OutputTokens);
     }
 
     /// <summary>

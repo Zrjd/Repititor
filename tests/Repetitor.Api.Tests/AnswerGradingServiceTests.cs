@@ -28,6 +28,10 @@ public sealed class AnswerGradingServiceTests
             AiOperation operation, Guid? userId, string? provider = null, double? temperature = null,
             CancellationToken ct = default) => throw new AiProviderException("test", null, "provider unavailable");
 
+        public Task<AiJsonResult> CompleteJsonWithUsageAsync(JsonNode schemaHint, string systemPrompt, string userPrompt,
+            AiOperation operation, Guid? userId, string? provider = null, double? temperature = null,
+            CancellationToken ct = default) => throw new AiProviderException("test", null, "provider unavailable");
+
         public Task<AiEmbeddingResult> EmbedAsync(IReadOnlyList<string> inputs, string? provider = null,
             CancellationToken ct = default) => throw new AiProviderException("test", null, "provider unavailable");
     }

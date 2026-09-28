@@ -177,6 +177,12 @@ public sealed class EmbeddingService(
                     query = query.Where(u => !db.LexicalUnitEmbeddings
                         .Any(e => e.LexicalUnitId == u.Id && e.Provider == providerName && e.Model == client.EmbeddingModel));
                 }
+                else
+                {
+                    // Без сдвига каждая итерация брала бы одну и ту же порцию
+                    // и пересчитывала одни и те же векторы до достижения limit.
+                    query = query.Skip(processed);
+                }
 
                 units = await query
                     .Take(take)
@@ -238,7 +244,7 @@ public sealed class EmbeddingService(
         var sql = $$"""
             INSERT INTO lexical_unit_embeddings
                 ("Id", "LexicalUnitId", "Provider", "Model", "Dimensions", "ContentHash", "CreatedAt", "UpdatedAt", {{column}})
-            VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, now(), now(), ({{6}})::vector)
+            VALUES (@id, @lexicalUnitId, @provider, @model, @dimensions, @contentHash, now(), now(), CAST(@vector AS vector))
             ON CONFLICT ("LexicalUnitId", "Provider", "Model") DO UPDATE
                 SET {{column}} = EXCLUDED.{{column}},
                     "ContentHash" = EXCLUDED."ContentHash",
@@ -248,7 +254,15 @@ public sealed class EmbeddingService(
 
         await db.Database.ExecuteSqlRawAsync(
             sql,
-            [Guid.NewGuid(), lexicalUnitId, provider, model, expected, contentHash ?? string.Empty, literal],
+            [
+                new NpgsqlParameter<Guid>("id", Guid.NewGuid()),
+                new NpgsqlParameter<Guid>("lexicalUnitId", lexicalUnitId),
+                new NpgsqlParameter<string>("provider", provider),
+                new NpgsqlParameter<string>("model", model),
+                new NpgsqlParameter<int>("dimensions", expected),
+                new NpgsqlParameter<string>("contentHash", contentHash ?? string.Empty),
+                new NpgsqlParameter<string>("vector", literal) { NpgsqlDbType = NpgsqlDbType.Text }
+            ],
             ct);
     }
 
@@ -371,7 +385,11 @@ public sealed class VectorSearchService(
             return [];
         }
 
-        var literal = EmbeddingService.ToVectorLiteral(embedding.Vectors[0], embedding.Dimensions);
+        // Запрос приводится к той же размерности, что и сохранённые векторы:
+        // колонка объявлена как vector(<EmbeddingDimensions>), а модель может вернуть меньше.
+        // Добавленные нули не влияют на косинусное расстояние.
+        var dimensions = client.Dimensions;
+        var literal = EmbeddingService.ToVectorLiteral(embedding.Vectors[0], dimensions);
         var threshold = 1.0 - minSimilarity;
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -391,6 +409,7 @@ public sealed class VectorSearchService(
             JOIN lexical_units l ON l."Id" = e."LexicalUnitId"
             WHERE e."Provider" = @provider
               AND e."Model" = @model
+              AND e."Dimensions" = @dimensions
               AND e.{column} IS NOT NULL
               AND l."LanguageId" = @languageId
               AND l."TranslationLanguageId" = @translationLanguageId
@@ -405,6 +424,7 @@ public sealed class VectorSearchService(
         AddParam(cmd, "provider", providerName, NpgsqlDbType.Text);
         AddParam(cmd, "model", client.EmbeddingModel, NpgsqlDbType.Text);
         AddParam(cmd, "vector", literal, NpgsqlDbType.Text);
+        AddParam(cmd, "dimensions", dimensions, NpgsqlDbType.Integer);
         AddParam(cmd, "languageId", languageId, NpgsqlDbType.Uuid);
         AddParam(cmd, "translationLanguageId", translationLanguageId, NpgsqlDbType.Uuid);
         AddParam(cmd, "exclude_id", excludeLexicalUnitId?.ToString(), NpgsqlDbType.Uuid);
@@ -474,6 +494,7 @@ public sealed class VectorSearchService(
               JOIN lexical_unit_embeddings other
                 ON other."Provider" = @provider
                AND other."Model" = @model
+               AND other."Dimensions" = src."Dimensions"
                AND other.{column} IS NOT NULL
                AND NOT (other."LexicalUnitId" = ANY(@ids))
               JOIN lexical_units l ON l."Id" = other."LexicalUnitId"

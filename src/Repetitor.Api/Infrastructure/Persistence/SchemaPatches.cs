@@ -16,8 +16,8 @@ public sealed class SchemaPatches
     private readonly ILogger<SchemaPatches> _logger;
 
     /// <summary>
-    /// Создаёт экземпляр службы патчей схемы БД.
-    /// Принимает контекст БД для выполнения SQL, настройки AI (для определения размерности векторов) и логгер.
+    /// Создаёт исполнитель миграций схемы с журналом выполнения.
+    /// Размерность векторных колонок берётся из настроек модели эмбеддингов.
     /// </summary>
     public SchemaPatches(AppDbContext db, Microsoft.Extensions.Options.IOptions<AiOptions> ai, ILogger<SchemaPatches> logger)
     {

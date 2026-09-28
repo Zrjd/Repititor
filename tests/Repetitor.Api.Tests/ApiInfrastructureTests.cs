@@ -129,3 +129,75 @@ public sealed class EmbeddingTextTests
         Assert.Equal("book\nкнига\nA book.\nКнига.", text);
     }
 }
+
+public sealed class AiScriptTests
+{
+    [Fact]
+    public void Detect_FindsCyrillic()
+    {
+        Assert.Equal(AiScript.Cyrillic, AiScript.Detect("Курс для начинающих: приветствия и знакомство."));
+    }
+
+    [Fact]
+    public void Detect_FindsHan()
+    {
+        Assert.Equal(AiScript.Han, AiScript.Detect("这门课程为初学者设计。"));
+    }
+
+    [Fact]
+    public void Detect_IgnoresPunctuationAndDigits()
+    {
+        Assert.Equal(AiScript.Latin, AiScript.Detect("A1 - B2! (2026)"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_AcceptsExpectedScript()
+    {
+        Assert.True(AiScript.MatchesLanguage("Курс о временах глагола в прошедшем времени.", "ru"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_RejectsWrongScript()
+    {
+        Assert.False(AiScript.MatchesLanguage("这门课程为 CEFR A1 学习者设计，包含四节课。", "ru"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_AcceptsShortText()
+    {
+        Assert.True(AiScript.MatchesLanguage("да", "ru"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_AcceptsEmptyText()
+    {
+        Assert.True(AiScript.MatchesLanguage(null, "ru"));
+        Assert.True(AiScript.MatchesLanguage("   ", "ru"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_ToleratesMinorForeignWords()
+    {
+        Assert.True(AiScript.MatchesLanguage("Курс о временах глагола: present, past и future.", "ru"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_ChecksLatinLanguages()
+    {
+        Assert.True(AiScript.MatchesLanguage("Kurs temawy czasowników dla początkujących.", "pl"));
+        Assert.False(AiScript.MatchesLanguage("这个课程为初学者设计面向初学者。", "pl"));
+    }
+
+    [Fact]
+    public void MatchesLanguage_ChecksJapanese()
+    {
+        Assert.True(AiScript.MatchesLanguage("初級者向けのコースです。", "ja"));
+    }
+
+    [Fact]
+    public void DisplayName_NamesScriptsForTheModel()
+    {
+        Assert.Equal("Chinese", AiScript.DisplayName(AiScript.Han));
+        Assert.Equal("Cyrillic", AiScript.DisplayName(AiScript.Cyrillic));
+    }
+}

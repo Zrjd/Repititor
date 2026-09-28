@@ -72,6 +72,7 @@ services:
       Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-}
       Ai__DefaultChatProvider: ${AI_DEFAULT_PROVIDER:-ollama}
       Ai__DefaultEmbeddingProvider: ${AI_DEFAULT_PROVIDER:-ollama}
+      Ai__RagMinSimilarity: ${AI_RAG_MIN_SIMILARITY:-0.25}
       Ai__Providers__openai__Enabled: ${OPENAI_ENABLED:-false}
       Ai__Providers__openai__ApiKey: ${OPENAI_API_KEY:-}
       Ai__Providers__ollama__Enabled: ${OLLAMA_ENABLED:-true}

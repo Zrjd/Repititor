@@ -178,7 +178,7 @@ public sealed class TutorChatService(
             .ToListAsync(ct);
         db.ChatMessages.RemoveRange(toRemove);
 
-        var request = await BuildRequestAsync(db, session, userMessage.Content, session.Provider, session.Model, session.UseDictionaryContext, ct);
+        var (request, rag) = await BuildRequestAsync(db, session, userMessage.Content, session.Provider, session.Model, session.UseDictionaryContext, ct);
         var result = await gateway.CompleteAsync(request, AiOperation.ChatCompletion, userId, session.Provider, ct);
 
         var assistant = new ChatMessage
@@ -189,7 +189,8 @@ public sealed class TutorChatService(
             Provider = session.Provider,
             Model = result.Model,
             InputTokens = result.InputTokens,
-            OutputTokens = result.OutputTokens
+            OutputTokens = result.OutputTokens,
+            RagContextRefs = rag.Select(r => r.LexicalUnitId).ToArray()
         };
         db.ChatMessages.Add(assistant);
         session.TotalInputTokens += result.InputTokens;
@@ -238,8 +239,7 @@ public sealed class TutorChatService(
             providerName = provider ?? _options.DefaultChatProvider;
         }
 
-        var request = await BuildRequestAsync(db, session, message, providerName, model, useDictionary ?? session.UseDictionaryContext, ct);
-        var rag = await LastRagAsync(sessionId, ct);
+        var (request, rag) = await BuildRequestAsync(db, session, message, providerName, model, useDictionary ?? session.UseDictionaryContext, ct);
 
         var userMessage = new ChatMessage
         {
@@ -251,7 +251,7 @@ public sealed class TutorChatService(
         return new PreparedTurn(request, providerName, userMessage, rag);
     }
 
-    private async Task<AiChatRequest> BuildRequestAsync(
+    private async Task<(AiChatRequest Request, IReadOnlyList<SemanticMatch> Rag)> BuildRequestAsync(
         AppDbContext db,
         ChatSession session,
         string message,
@@ -269,9 +269,11 @@ public sealed class TutorChatService(
 
         var messages = new List<AiChatMessage> { AiChatMessage.System(system) };
 
+        IReadOnlyList<SemanticMatch> rag = [];
+
         if (useDictionary)
         {
-            var rag = await BuildRagContextAsync(user, target, interfaceLanguage, message, provider, ct);
+            rag = await BuildRagContextAsync(user, target, interfaceLanguage, message, provider, ct);
             if (rag.Count > 0)
             {
                 messages.Add(AiChatMessage.System(BuildRagBlock(rag)));
@@ -292,13 +294,15 @@ public sealed class TutorChatService(
 
         messages.Add(AiChatMessage.User(message));
 
-        return new AiChatRequest
+        var request = new AiChatRequest
         {
             Messages = messages,
             Model = string.IsNullOrWhiteSpace(model) ? session.Model : model,
             Temperature = _options.Temperature,
             MaxTokens = _options.MaxOutputTokens
         };
+
+        return (request, rag);
     }
 
     private async Task<IReadOnlyList<SemanticMatch>> BuildRagContextAsync(
@@ -325,29 +329,6 @@ public sealed class TutorChatService(
         {
             return [];
         }
-    }
-
-    private async Task<IReadOnlyList<SemanticMatch>> LastRagAsync(Guid sessionId, CancellationToken ct)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var last = await db.ChatMessages
-            .Where(m => m.SessionId == sessionId && m.RagContextRefs != null)
-            .OrderByDescending(m => m.CreatedAt)
-            .Select(m => m.RagContextRefs)
-            .FirstOrDefaultAsync(ct);
-
-        if (last is null || last.Length == 0)
-        {
-            return [];
-        }
-
-        var rows = await db.LexicalUnits
-            .Where(u => last.Contains(u.Id))
-            .Select(u => new SemanticMatch(u.Id, u.Text, u.Translation, u.Transcription,
-                u.PartOfSpeech.ToString(), 0d, u.MinLearnerLevel, u.ExampleTarget))
-            .ToListAsync(ct);
-
-        return rows;
     }
 
     private async Task PersistAsync(Guid userId, PreparedTurn prepared, ChatMessage assistant, int inputTokens, int outputTokens, CancellationToken ct)

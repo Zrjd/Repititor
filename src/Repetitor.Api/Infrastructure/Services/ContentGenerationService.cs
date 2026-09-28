@@ -60,7 +60,8 @@ public interface IContentGenerationService
 public sealed class ContentGenerationService(
     IDbContextFactory<AppDbContext> dbFactory,
     IAiGateway gateway,
-    IOptions<AiOptions> aiOptions) : IContentGenerationService
+    IOptions<AiOptions> aiOptions,
+    ILogger<ContentGenerationService> logger) : IContentGenerationService
 {
     private readonly AiOptions _options = aiOptions.Value;
 
@@ -99,6 +100,7 @@ public sealed class ContentGenerationService(
               "key_vocabulary": ["5-8 words or short phrases from the lesson"]
             }
             Rules: content must be accurate, level-appropriate, and pedagogically structured.
+            The field "summary" must be written in {{interfaceLang.NameEnglish}} ({{interfaceLang.NativeName}}) only. Never write it in another language.
             """;
 
         var user = $"""
@@ -110,7 +112,7 @@ public sealed class ContentGenerationService(
             {(string.IsNullOrWhiteSpace(requirements) ? "" : $"Requirements: {requirements}")}
             """;
 
-        var json = await gateway.CompleteJsonAsync(
+        var (result, summaryText) = await EnsureLanguageAsync(
             new JsonObject
             {
                 ["title"] = "string",
@@ -120,20 +122,21 @@ public sealed class ContentGenerationService(
             },
             system,
             user,
-            AiOperation.ChatCompletion,
-            null,
+            "summary",
+            interfaceLang,
             provider,
-            temperature: 0.7,
-            ct: ct);
+            ct);
 
+        var json = result.Json;
         return new LessonContentGeneration(
             ReadString(json, "title") ?? $"{target.NameEnglish} lesson",
-            ReadString(json, "summary"),
+            summaryText.Length > 0 ? summaryText : null,
             ReadString(json, "content_markdown") ?? string.Empty,
             ReadStringArray(json, "key_vocabulary"),
             gateway.ResolveChat(provider).Name,
             string.IsNullOrWhiteSpace(model) ? gateway.ResolveChat(provider).ChatModel : model,
-            0, 0);
+            result.InputTokens,
+            result.OutputTokens);
     }
 
     /// <summary>
@@ -163,6 +166,7 @@ public sealed class ContentGenerationService(
               "lesson_titles": ["{{lessonsCount}} lesson titles in {{language.NameEnglish}}, progressing from simple to complex"]
             }
             Rules: titles must be specific, level-appropriate, and form a coherent learning path.
+            The field "description" must be written in {{interfaceLang.NameEnglish}} ({{interfaceLang.NativeName}}) only. Never write it in another language.
             """;
 
         var user = $"""
@@ -172,7 +176,7 @@ public sealed class ContentGenerationService(
             Number of lessons: {lessonsCount}
             """;
 
-        var json = await gateway.CompleteJsonAsync(
+        var (result, description) = await EnsureLanguageAsync(
             new JsonObject
             {
                 ["description"] = "string",
@@ -180,18 +184,69 @@ public sealed class ContentGenerationService(
             },
             system,
             user,
-            AiOperation.ChatCompletion,
-            null,
+            "description",
+            interfaceLang,
             provider,
-            temperature: 0.7,
-            ct: ct);
+            ct);
 
+        var json = result.Json;
         return new CourseContentGeneration(
-            ReadString(json, "description") ?? string.Empty,
+            description,
             ReadStringArray(json, "lesson_titles"),
             gateway.ResolveChat(provider).Name,
             string.IsNullOrWhiteSpace(model) ? gateway.ResolveChat(provider).ChatModel : model,
-            0, 0);
+            result.InputTokens,
+            result.OutputTokens);
+    }
+
+    /// <summary>
+    /// Вызывает модель и проверяет, что указанное поле ответа написано на языке интерфейса.
+    /// Если модель ушла в другой язык (частая беда небольших моделей), запрос повторяется
+    /// с явным указанием нужного языка, а токены обеих попыток суммируются.
+    /// </summary>
+    private async Task<(AiJsonResult Result, string Text)> EnsureLanguageAsync(
+        JsonObject schema,
+        string system,
+        string user,
+        string field,
+        Language interfaceLang,
+        string? provider,
+        CancellationToken ct)
+    {
+        var result = await gateway.CompleteJsonWithUsageAsync(
+            schema, system, user, AiOperation.ChatCompletion, null, provider, temperature: 0.7, ct: ct);
+        var text = ReadString(result.Json, field) ?? string.Empty;
+
+        if (AiScript.MatchesLanguage(text, interfaceLang.Code))
+        {
+            return (result, text);
+        }
+
+        var detected = AiScript.Detect(text);
+        logger.LogWarning(
+            "AI returned field {Field} in {Detected} script instead of {Expected}; retrying",
+            field, detected, interfaceLang.Code);
+
+        var correction = $"""
+            {user}
+
+            The previous attempt wrote "{field}" in {AiScript.DisplayName(detected)} script. That is wrong.
+            Rewrite the whole JSON object so that "{field}" is written in {interfaceLang.NameEnglish} ({interfaceLang.NativeName}) only.
+            """;
+
+        var retry = await gateway.CompleteJsonWithUsageAsync(
+            schema, system, correction, AiOperation.ChatCompletion, null, provider, temperature: 0.3, ct: ct);
+        var retryText = ReadString(retry.Json, field) ?? string.Empty;
+
+        if (AiScript.MatchesLanguage(retryText, interfaceLang.Code))
+        {
+            logger.LogInformation("Field {Field} is in {Expected} script after retry", field, interfaceLang.Code);
+            return (retry, retryText);
+        }
+
+        // Модель снова ушла не туда: возвращаем первый вариант, но честно учитываем обе попытки.
+        logger.LogWarning("Field {Field} is still not in {Expected} script after retry; keeping first answer", field, interfaceLang.Code);
+        return (new AiJsonResult(result.Json, result.InputTokens + retry.InputTokens, result.OutputTokens + retry.OutputTokens), text);
     }
 
     private static string? ReadString(JsonNode json, string key) =>
