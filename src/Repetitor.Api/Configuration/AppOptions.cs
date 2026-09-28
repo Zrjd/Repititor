@@ -10,6 +10,7 @@ public sealed class JwtOptions
     public int AccessTokenMinutes { get; set; } = 30;
     public int RefreshTokenDays { get; set; } = 30;
     public int ClockSkewSeconds { get; set; } = 30;
+    public string ResetPasswordUrl { get; set; } = "http://localhost:5080/reset-password";
 }
 
 public sealed class AiOptions

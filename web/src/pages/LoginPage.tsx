@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useI18n } from '../i18n'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { ApiError } from '../api/client'
+import { authApi } from '../api/endpoints'
 
 export function LoginPage() {
   const { t } = useI18n()
@@ -14,6 +15,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
@@ -29,6 +33,69 @@ export function LoginPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const submitForgot = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await authApi.forgotPassword(forgotEmail.trim())
+      setForgotSent(true)
+    } catch {
+      setError(t('common.error'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (showForgot) {
+    return (
+      <div className="auth">
+        <div className="auth__aside">
+          <span className="auth__logo" aria-hidden="true">
+            R
+          </span>
+          <h1>{t('app.name')}</h1>
+          <p>{t('app.tagline')}</p>
+          <LanguageToggle />
+        </div>
+
+        <form className="auth__form card" onSubmit={submitForgot}>
+          <h2>{t('auth.forgotTitle')}</h2>
+          <p className="auth__hint">{t('auth.forgotHint')}</p>
+
+          {forgotSent ? (
+            <p className="alert alert--success">{t('auth.forgotSent')}</p>
+          ) : (
+            <>
+              <label className="field">
+                <span>{t('auth.email')}</span>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(event) => setForgotEmail(event.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </label>
+
+              {error ? <p className="alert alert--error">{error}</p> : null}
+
+              <button type="submit" className="button button--primary" disabled={busy}>
+                {busy ? t('common.loading') : t('auth.forgotSubmit')}
+              </button>
+            </>
+          )}
+
+          <p className="auth__switch">
+            <Link to="/login" onClick={(e) => { e.preventDefault(); setShowForgot(false); setForgotSent(false) }}>
+              {t('auth.backToLogin')}
+            </Link>
+          </p>
+        </form>
+      </div>
+    )
   }
 
   return (
@@ -72,6 +139,12 @@ export function LoginPage() {
         <button type="submit" className="button button--primary" disabled={busy}>
           {busy ? t('common.loading') : t('auth.submitLogin')}
         </button>
+
+        <p className="auth__switch">
+          <Link to="/login" onClick={(e) => { e.preventDefault(); setShowForgot(true) }}>
+            {t('auth.forgotLink')}
+          </Link>
+        </p>
 
         <p className="auth__switch">
           {t('auth.noAccount')}{' '}

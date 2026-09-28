@@ -37,6 +37,10 @@ export const authApi = {
   me: () => api.get<UserProfile>('/auth/me'),
   logout: (refreshToken: string) => api.post<void>('/auth/logout', { refreshToken }),
   logoutAll: () => api.post<void>('/auth/logout-all'),
+  forgotPassword: (email: string) =>
+    api.post<void>('/auth/forgot-password', { email }, { auth: false }),
+  resetPassword: (token: string, newPassword: string) =>
+    api.post<void>('/auth/reset-password', { token, newPassword }, { auth: false }),
   updateProfile: (patch: {
     displayName?: string
     targetLanguageId?: string

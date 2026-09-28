@@ -23,6 +23,7 @@ public sealed class AuthController(
     IClock clock,
     IOptions<JwtOptions> jwtOptions,
     IOptions<LearningOptions> learningOptions,
+    IEmailService emailService,
     ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("register")]
@@ -291,7 +292,10 @@ public sealed class AuthController(
                 ExpiresAt = clock.UtcNow.AddHours(2)
             });
             await db.SaveChangesAsync(ct);
-            logger.LogInformation("Password reset requested for {Email}; token={Token}", email, token);
+
+            var baseUrl = jwtOptions.Value.ResetPasswordUrl;
+            var resetLink = $"{baseUrl}?token={Uri.EscapeDataString(token)}";
+            await emailService.SendPasswordResetAsync(user.Email, resetLink, ct);
         }
 
         return Accepted(new { message = "Если аккаунт существует, ссылка для сброса отправлена." });

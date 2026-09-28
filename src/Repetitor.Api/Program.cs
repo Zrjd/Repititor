@@ -49,6 +49,7 @@ foreach (var (name, provider) in aiOptions.Providers)
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton<IEmailService, LoggingEmailService>();
 
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsql =>

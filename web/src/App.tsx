@@ -16,6 +16,7 @@ import { MyWordsPage } from './pages/MyWordsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PracticePage } from './pages/PracticePage'
 import { RegisterPage } from './pages/RegisterPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ReviewSessionPage } from './pages/ReviewSessionPage'
 
 const queryClient = new QueryClient({
@@ -71,6 +72,14 @@ export default function App() {
                 element={
                   <GuestOnly>
                     <RegisterPage />
+                  </GuestOnly>
+                }
+              />
+              <Route
+                path="/reset-password"
+                element={
+                  <GuestOnly>
+                    <ResetPasswordPage />
                   </GuestOnly>
                 }
               />
