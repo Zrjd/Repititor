@@ -38,6 +38,10 @@ public sealed class TutorChatService(
 {
     private readonly AiOptions _options = aiOptions.Value;
 
+    /// <summary>
+    /// Создаёт новую сессию чата с репетитором для пользователя.
+    /// Определяет провайдера ИИ по умолчанию, формирует заголовок и сохраняет сессию в базу данных.
+    /// </summary>
     public async Task<ChatSession> StartSessionAsync(
         Guid userId,
         TutorMode mode,
@@ -73,6 +77,10 @@ public sealed class TutorChatService(
         return session;
     }
 
+    /// <summary>
+    /// Отправляет сообщение пользователя в рамках существующей сессии и возвращает ответ репетитора.
+    /// Подготавливает контекст (история, RAG), вызывает ИИ и сохраняет оба сообщения в базу данных.
+    /// </summary>
     public async Task<TutorTurn> SendAsync(
         Guid userId,
         Guid sessionId,
@@ -107,6 +115,10 @@ public sealed class TutorChatService(
             (int)sw.ElapsedMilliseconds, prepared.Rag);
     }
 
+    /// <summary>
+    /// Отправляет сообщение пользователя и возвращает ответ репетитора в виде потока текстовых фрагментов.
+    /// Позволяет отображать ответ по мере его генерации, улучшая восприятие скорости работы.
+    /// </summary>
     public async IAsyncEnumerable<string> StreamAsync(
         Guid userId,
         Guid sessionId,
@@ -142,6 +154,10 @@ public sealed class TutorChatService(
         await PersistAsync(userId, prepared, assistant, 0, 0, ct);
     }
 
+    /// <summary>
+    /// Перегенерирует ответ репетитора на конкретное сообщение, удаляя все последующие ответы.
+    /// Полезно, когда пользователь хочет получить другой вариант ответа без создания новой сессии.
+    /// </summary>
     public async Task<ChatMessage> RegenerateAsync(Guid userId, Guid sessionId, Guid messageId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -183,6 +199,10 @@ public sealed class TutorChatService(
         return assistant;
     }
 
+    /// <summary>
+    /// Переименовывает существующую сессию чата.
+    /// Позволяет пользователю задать понятное название диалога для удобной навигации в истории.
+    /// </summary>
     public async Task<int> RenameAsync(Guid userId, Guid sessionId, string title, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

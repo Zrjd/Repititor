@@ -6,6 +6,10 @@ namespace Repetitor.Api.Infrastructure.Persistence.Configurations;
 
 public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности User с таблицей users.
+    /// Определяет параметры пользователей, включая email, хэш пароля, роль и связи с языками.
+    /// </summary>
     public void Configure(EntityTypeBuilder<User> b)
     {
         b.ToTable("users");
@@ -41,6 +45,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
 public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности RefreshToken с таблицей refresh_tokens.
+    /// Определяет параметры токенов обновления, включая хэш токена, срок действия и связь с пользователем.
+    /// </summary>
     public void Configure(EntityTypeBuilder<RefreshToken> b)
     {
         b.ToTable("refresh_tokens");
@@ -60,6 +68,10 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
 
 public sealed class PasswordResetTokenConfiguration : IEntityTypeConfiguration<PasswordResetToken>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности PasswordResetToken с таблицей password_reset_tokens.
+    /// Определяет параметры токенов сброса пароля, включая хэш токена и срок действия.
+    /// </summary>
     public void Configure(EntityTypeBuilder<PasswordResetToken> b)
     {
         b.ToTable("password_reset_tokens");

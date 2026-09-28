@@ -26,6 +26,11 @@ public sealed class DictionaryController(
 {
     private readonly LearningOptions _learning = learningOptions.Value;
 
+    /// <summary>
+    /// Ищет слова в словаре с фильтрацией и пагинацией.
+    /// Поддерживает два режима: обычный текстовый поиск (по префиксу или вхождению) и семантический поиск (по смыслу через векторные представления).
+    /// Можно фильтровать по уровню сложности, части речи и тегам.
+    /// </summary>
     [HttpGet("words")]
     [ProducesResponseType(typeof(PagedResponse<LexicalUnitResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<LexicalUnitResponse>>> Search([FromQuery] SearchWordsRequest request, CancellationToken ct)
@@ -103,6 +108,11 @@ public sealed class DictionaryController(
             rows.Select(r => r.ToResponse()).ToArray(), page, request.Limit, total));
     }
 
+    /// <summary>
+    /// Возвращает полную информацию о слове по его идентификатору.
+    /// Включает перевод, транскрипцию, примеры, теги и другие метаданные слова.
+    /// Используется для отображения детальной карточки слова.
+    /// </summary>
     [HttpGet("words/{id}")]
     [ProducesResponseType(typeof(LexicalUnitResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -113,6 +123,11 @@ public sealed class DictionaryController(
         return unit is null ? NotFound() : Ok(unit.ToResponse());
     }
 
+    /// <summary>
+    /// Находит слова, близкие по смыслу к заданному слову.
+    /// Использует векторные представления для поиска семантически похожих слов.
+    /// Полезно для расширения словарного запаса — показывает синонимы и слова из той же тематической группы.
+    /// </summary>
     [HttpGet("words/similar/{id}")]
     [ProducesResponseType(typeof(LexicalUnitResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<LexicalUnitResponse[]>> SimilarWords(Guid id, [FromQuery] int limit = 10, [FromQuery] string? provider = null, CancellationToken ct = default)
@@ -128,6 +143,11 @@ public sealed class DictionaryController(
             .ToArray());
     }
 
+    /// <summary>
+    /// Создаёт новое слово в словаре и автоматически добавляет его к пользователю.
+    /// Проверяет на дубликаты — если такое слово уже есть, возвращает ошибку конфликта.
+    /// При необходимости сразу вычисляет векторное представление для семантического поиска.
+    /// </summary>
     [HttpPost("words")]
     [ProducesResponseType(typeof(LexicalUnitResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<LexicalUnitResponse>> CreateWord(CreateLexicalUnitRequest request, CancellationToken ct)
@@ -192,6 +212,11 @@ public sealed class DictionaryController(
         return CreatedAtAction(nameof(GetWord), new { id = unit.Id }, unit.ToResponse());
     }
 
+    /// <summary>
+    /// Обновляет информацию о существующем слове в словаре.
+    /// Обновляются только переданные поля; остальные данные остаются без изменений.
+    /// Если изменился текст или перевод, автоматически пересчитывается векторное представление.
+    /// </summary>
     [HttpPut("words/{id}")]
     [ProducesResponseType(typeof(LexicalUnitResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -237,6 +262,11 @@ public sealed class DictionaryController(
         return Ok(unit.ToResponse());
     }
 
+    /// <summary>
+    /// Удаляет (помечает как устаревшее) слово из словаря.
+    /// Удаление мягкое — слово помечается как Deprecated и скрывается из поиска, но данные сохраняются.
+    /// Удалить слово может только его автор или администратор/учитель.
+    /// </summary>
     [HttpDelete("words/{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -266,6 +296,11 @@ public sealed class DictionaryController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Массово импортирует слова из текста (например, в формате TSV — слово, перевод, транскрипция, пример).
+    /// При импорте проверяются дубликаты: существующие слова обновляются, новые — добавляются.
+    /// Возвращает подробный отчёт: сколько слов добавлено, обновлено, пропущено и сколько строк завершились ошибкой.
+    /// </summary>
     [HttpPost("words/import")]
     [ProducesResponseType(typeof(ImportWordsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ImportWordsResponse>> Import(ImportWordsRequest request, CancellationToken ct)
@@ -388,6 +423,11 @@ public sealed class DictionaryController(
         return Ok(new ImportWordsResponse(imported, updated, skipped, failed, errors.Take(20).ToArray()));
     }
 
+    /// <summary>
+    /// Возвращает слова, которые пользователь добавил в свой личный словарь.
+    /// Можно фильтровать по состоянию карточки (новое, изучается, выучено) и по конкретной колоде.
+    /// Используется для отображения персонального списка изучаемых слов.
+    /// </summary>
     [HttpGet("my-words")]
     [ProducesResponseType(typeof(PagedResponse<UserWordResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<UserWordResponse>>> MyWords([FromQuery] PagedRequest request, [FromQuery] CardState? state, [FromQuery] Guid? deckId, CancellationToken ct)
@@ -422,6 +462,11 @@ public sealed class DictionaryController(
         return Ok(new PagedResponse<UserWordResponse>(rows.Select(r => r.ToResponse()).ToArray(), page, request.PageSize, total));
     }
 
+    /// <summary>
+    /// Добавляет слово из общего словаря в личный словарь пользователя.
+    /// Слово становится доступным для повторений и может быть добавлено в указанную колоду.
+    /// Также можно сохранить личную заметку к слову.
+    /// </summary>
     [HttpPost("my-words/{lexicalUnitId}")]
     [ProducesResponseType(typeof(UserWordResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<UserWordResponse>> AddMyWord(Guid lexicalUnitId, [FromQuery] Guid? deckId, [FromQuery] string? note, [FromQuery] ContentSource source = ContentSource.UserCreated, CancellationToken ct = default)
@@ -442,6 +487,11 @@ public sealed class DictionaryController(
         return StatusCode(StatusCodes.Status201Created, entry.ToResponse());
     }
 
+    /// <summary>
+    /// Удаляет слово из личного словаря пользователя.
+    /// Слово перестаёт участвовать в повторениях и удаляется из всех колод пользователя.
+    /// Само слово в общем словаре при этом не удаляется.
+    /// </summary>
     [HttpDelete("my-words/{lexicalUnitId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> RemoveMyWord(Guid lexicalUnitId, CancellationToken ct)
@@ -461,6 +511,11 @@ public sealed class DictionaryController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Возвращает слово дня для текущего пользователя.
+    /// Слово выбирается детерминированно на основе даты и идентификатора пользователя — у всех будет одинаковое слово в течение дня.
+    /// Учитывает целевой язык и уровень владения пользователя.
+    /// </summary>
     [HttpGet("word-of-the-day")]
     [ProducesResponseType(typeof(WordOfTheDayResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<WordOfTheDayResponse>> WordOfTheDay(CancellationToken ct)
@@ -494,6 +549,11 @@ public sealed class DictionaryController(
         return Ok(new WordOfTheDayResponse(word.ToResponse(), $"Слово дня {start:dd.MM.yyyy}", word.AudioUrl));
     }
 
+    /// <summary>
+    /// Генерирует аудиофайл с произношением слова через сервис синтеза речи.
+    /// Аудио сохраняется в базе данных и привязывается к слову, чтобы пользователь мог прослушать правильное произношение.
+    /// Можно выбрать голос синтеза через параметр voice.
+    /// </summary>
     [HttpPost("audio/word/{lexicalUnitId}")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> GenerateWordAudio(Guid lexicalUnitId, [FromQuery] string? voice, CancellationToken ct)

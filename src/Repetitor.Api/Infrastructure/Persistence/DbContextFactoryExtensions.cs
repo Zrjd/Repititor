@@ -4,6 +4,10 @@ namespace Repetitor.Api.Infrastructure.Persistence;
 
 public static class DbContextFactoryExtensions
 {
+    /// <summary>
+    /// Определяет код языка (например, "en", "ru") по его идентификатору GUID.
+    /// Возвращает null, если идентификатор не указан или язык не найден. Используется для преобразования ID в читаемый код.
+    /// </summary>
     public static async Task<string?> ResolveLanguageCodeAsync(
         this IDbContextFactory<AppDbContext> dbFactory,
         Guid? languageId,
@@ -22,6 +26,10 @@ public static class DbContextFactoryExtensions
             .FirstOrDefaultAsync(ct);
     }
 
+    /// <summary>
+    /// Определяет коды языков для списка идентификаторов GUID за один запрос к БД.
+    /// Возвращает словарь «GUID → код языка». Используется для массового преобразования ID в коды без множества отдельных запросов.
+    /// </summary>
     public static async Task<Dictionary<Guid, string>> ResolveLanguageCodesAsync(
         this IDbContextFactory<AppDbContext> dbFactory,
         IEnumerable<Guid> languageIds,

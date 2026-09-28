@@ -26,7 +26,13 @@ public sealed record GenerationReport(Exercise Exercise, int Items, IReadOnlyLis
 
 public interface IExerciseGeneratorService
 {
+    /// <summary>
+    /// Генерирует новое упражнение с помощью ИИ.
+    /// </summary>
     Task<GenerationReport> GenerateAsync(ExerciseGenerationRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Список типов упражнений, которые поддерживает генератор.
+    /// </summary>
     IReadOnlyList<ExerciseType> SupportedTypes { get; }
 }
 
@@ -38,6 +44,10 @@ public sealed class ExerciseGeneratorService(
 {
     private readonly AiOptions _options = aiOptions.Value;
 
+    /// <summary>
+    /// Список типов упражнений, которые умеет создавать генератор.
+    /// Используется для проверки запроса перед генерацией.
+    /// </summary>
     public IReadOnlyList<ExerciseType> SupportedTypes { get; } =
     [
         ExerciseType.MultipleChoice,
@@ -50,6 +60,11 @@ public sealed class ExerciseGeneratorService(
         ExerciseType.Writing
     ];
 
+    /// <summary>
+    /// Генерирует упражнение заданного типа и уровня с помощью ИИ.
+    /// Подбирает лексику по теме или из указанных слов, формирует промпт и сохраняет результат в базу.
+    /// Возвращает созданное упражнение вместе с предупреждениями о возможных проблемах.
+    /// </summary>
     public async Task<GenerationReport> GenerateAsync(ExerciseGenerationRequest request, CancellationToken ct = default)
     {
         if (!SupportedTypes.Contains(request.Type))

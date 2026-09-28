@@ -30,17 +30,32 @@ public sealed record GradingResult(
     string Method,
     IReadOnlyList<JsonObject> Items)
 {
+    /// <summary>
+    /// Детальный результат проверки каждого задания упражнения.
+    /// Пустой список означает, что проверка выполнялась без разбивки на задания.
+    /// </summary>
     public IReadOnlyList<JsonObject> Items { get; init; } = Items ?? [];
 }
 
 public interface IAnswerGradingService
 {
+    /// <summary>
+    /// Проверяет ответ ученика и возвращает оценку с пояснениями.
+    /// </summary>
     Task<GradingResult> GradeAsync(GradingRequest request, Guid? userId, CancellationToken ct = default);
+    /// <summary>
+    /// Проверяет все ответы ученика на упражнение целиком.
+    /// </summary>
     Task<GradingResult> GradeExerciseAsync(Exercise exercise, JsonNode answers, Guid userId, CancellationToken ct = default);
 }
 
 public sealed class AnswerGradingService(IAiGateway gateway) : IAnswerGradingService
 {
+    /// <summary>
+    /// Оценивает ответ ученика по отношению к эталону.
+    /// Сначала применяется быстрая эвристическая проверка, затем при возможности — более точная проверка через ИИ.
+    /// Если ИИ недоступен, возвращается эвристический результат.
+    /// </summary>
     public async Task<GradingResult> GradeAsync(GradingRequest request, Guid? userId, CancellationToken ct = default)
     {
         var answer = TextNormalizer.Collapse(request.Answer);
@@ -101,6 +116,11 @@ public sealed class AnswerGradingService(IAiGateway gateway) : IAnswerGradingSer
         }
     }
 
+    /// <summary>
+    /// Проверяет ответы ученика на упражнение целиком по типу заданий.
+    /// Для каждого задания сверяет ответ с эталоном и собирает итоговый процент и список ошибок.
+    /// Текстовые ответы дополнительно оцениваются через ИИ.
+    /// </summary>
     public async Task<GradingResult> GradeExerciseAsync(Exercise exercise, JsonNode answers, Guid userId, CancellationToken ct = default)
     {
         var payload = exercise.Payload;
@@ -363,11 +383,19 @@ public sealed record WordScore(string Word, string Expected, string Recognized, 
 
 public interface IPronunciationService
 {
+    /// <summary>
+    /// Оценивает произношение ученика по записанной речи.
+    /// </summary>
     Task<PronunciationResult> AssessAsync(PronunciationRequest request, Guid? userId, CancellationToken ct = default);
 }
 
 public sealed class PronunciationService(IAiGateway gateway) : IPronunciationService
 {
+    /// <summary>
+    /// Оценивает произношение ученика по расшифровке его речи.
+    /// Возвращает баллы по нескольким критериям: точность, беглость, полнота и просодика.
+    /// При недоступности ИИ используется упрощённая эвристическая оценка.
+    /// </summary>
     public async Task<PronunciationResult> AssessAsync(PronunciationRequest request, Guid? userId, CancellationToken ct = default)
     {
         var heuristic = ScoreHeuristically(request);

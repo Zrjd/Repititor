@@ -31,8 +31,16 @@ public sealed class FileSystemMediaStorage(
         ? options.Value.RootPath
         : Path.Combine(env.ContentRootPath, options.Value.RootPath);
 
+    /// <summary>
+    /// Формирует публичный URL для доступа к медиафайлу по его относительному пути.
+    /// Преобразует разделители пути в прямые слэши для корректной работы в веб-среде.
+    /// </summary>
     public string UrlFor(string relativePath) => "/media/" + relativePath.Replace('\\', '/').TrimStart('/');
 
+    /// <summary>
+    /// Сохраняет медиафайл на диск и регистрирует его в базе данных.
+    /// Проверяет размер и тип файла, создаёт структуру каталогов по дате и возвращает метаданные сохранённого файла.
+    /// </summary>
     public async Task<StoredMedia> SaveAsync(
         byte[] content,
         string extension,
@@ -77,6 +85,10 @@ public sealed class FileSystemMediaStorage(
         return new StoredMedia(entity.Id, entity.StoragePath, contentType, content.LongLength, UrlFor(entity.StoragePath));
     }
 
+    /// <summary>
+    /// Читает содержимое медиафайла в виде массива байтов по его относительному пути.
+    /// Проверяет, что путь не выходит за пределы корневого каталога медиа, для предотвращения обхода каталогов.
+    /// </summary>
     public async Task<byte[]> ReadAsync(string relativePath, CancellationToken ct = default)
     {
         var absolute = ResolveSafe(relativePath);
@@ -88,6 +100,10 @@ public sealed class FileSystemMediaStorage(
         return await File.ReadAllBytesAsync(absolute, ct);
     }
 
+    /// <summary>
+    /// Открывает потоковое чтение медиафайла без загрузки всего содержимого в память.
+    /// Подходит для передачи больших аудиофайлов клиенту с минимальным потреблением памяти.
+    /// </summary>
     public Stream OpenRead(string relativePath)
     {
         var absolute = ResolveSafe(relativePath);
@@ -99,8 +115,16 @@ public sealed class FileSystemMediaStorage(
         return File.OpenRead(absolute);
     }
 
+    /// <summary>
+    /// Проверяет существование медиафайла по относительному пути.
+    /// Безопасно разрешает путь и возвращает true, если файл доступен для чтения.
+    /// </summary>
     public bool Exists(string relativePath) => File.Exists(ResolveSafe(relativePath));
 
+    /// <summary>
+    /// Удаляет медиафайл с диска по его относительному пути.
+    /// Файл удаляется только в пределах корневого каталога медиа, что предотвращает случайное удаление системных файлов.
+    /// </summary>
     public void Delete(string relativePath)
     {
         var absolute = ResolveSafe(relativePath);
@@ -110,6 +134,10 @@ public sealed class FileSystemMediaStorage(
         }
     }
 
+    /// <summary>
+    /// Создаёт каталог для указанного относительного пути, если он ещё не существует.
+    /// Гарантирует наличие всех промежуточных каталогов перед записью нового медиафайла.
+    /// </summary>
     public void EnsureDirectory(string relativePath)
     {
         var absolute = ResolveSafe(relativePath);
@@ -120,6 +148,10 @@ public sealed class FileSystemMediaStorage(
         }
     }
 
+    /// <summary>
+    /// Определяет MIME-тип по расширению файла для аудиоформатов.
+    /// Возвращает "application/octet-stream" для неизвестных расширений, обеспечивая безопасную обработку любых файлов.
+    /// </summary>
     public string ContentTypeFor(string extension) => extension.ToLowerInvariant() switch
     {
         ".mp3" => "audio/mpeg",
@@ -176,6 +208,10 @@ public sealed class SpeechService(
 {
     private readonly AiOptions _options = aiOptions.Value;
 
+    /// <summary>
+    /// Синтезирует речь из текста через выбранного провайдера ИИ и сохраняет аудиофайл.
+    /// Находит провайдера с поддержкой TTS, генерирует аудио в формате MP3 и связывает его с исходным текстом.
+    /// </summary>
     public async Task<StoredMedia> SynthesizeAsync(
         string text,
         string languageCode,
@@ -221,6 +257,10 @@ public sealed class SpeechService(
         return stored;
     }
 
+    /// <summary>
+    /// Преобразует аудиофайл в текст через выбранного провайдера ИИ.
+    /// Находит провайдера с поддержкой STT и возвращает результат распознавания речи с учётом указанного языка.
+    /// </summary>
     public async Task<AiTranscriptionResult> TranscribeAsync(
         byte[] audio,
         string fileName,

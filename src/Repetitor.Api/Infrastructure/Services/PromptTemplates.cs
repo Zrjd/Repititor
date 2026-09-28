@@ -9,6 +9,11 @@ namespace Repetitor.Api.Infrastructure.Services;
 
 public static class PromptTemplates
 {
+    /// <summary>
+    /// Создаёт системный промпт для ИИ-репетитора с учётом данных ученика.
+    /// Промпт определяет роль модели, язык общения, правила исправления ошибок и стиль ведения диалога.
+    /// Используется при каждом новом диалоге с репетитором, чтобы модель вела себя как настоящий преподаватель.
+    /// </summary>
     public static string TutorSystem(User user, Language target, Language @interface, TutorMode mode, string? scenario) =>
         $"""
          You are "Repetitor", a warm and demanding {target.NameEnglish} tutor inside a language-learning app.
@@ -34,6 +39,11 @@ public static class PromptTemplates
         _ => "Free conversation practice."
     };
 
+    /// <summary>
+    /// Системный промпт для генератора языковых упражнений.
+    /// Определяет модель как методиста, который возвращает упражнения строго в формате JSON.
+    /// Единый формат ответа упрощает дальнейшую обработку и сохранение данных.
+    /// </summary>
     public const string ExerciseGeneratorSystem = """
         You are an expert methodologist who creates language-learning exercises.
         You always answer with a single valid JSON object, never markdown, never extra text.
@@ -41,6 +51,11 @@ public static class PromptTemplates
         unless the schema explicitly allows several.
         """;
 
+    /// <summary>
+    /// Формирует пользовательскую часть промпта для генерации упражнений.
+    /// Собирает сведения о языке, уровне CEFR, типе и количестве заданий, теме и изучаемой лексике.
+    /// Чем подробнее запрос, тем более релевантные упражнения создаст модель.
+    /// </summary>
     public static string ExerciseGeneratorUser(
         string targetLanguage,
         string interfaceLanguage,
@@ -71,6 +86,11 @@ public static class PromptTemplates
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Возвращает JSON-схему ответа модели для заданного типа упражнений.
+    /// Схема описывает ожидаемую структуру данных и помогает модели выдать корректный результат.
+    /// Для каждого типа упражнения предусмотрена своя структура полей.
+    /// </summary>
     public static JsonNode ExerciseSchema(ExerciseType type) => type switch
     {
         ExerciseType.MultipleChoice => new JsonObject
@@ -184,24 +204,41 @@ public static class PromptTemplates
         }
     };
 
+    /// <summary>
+    /// Системный промпт для проверки ответов ученика.
+    /// Устанавливает правила оценки: сначала смысл, затем грамматика и стиль, без штрафа за варианты формулировок.
+    /// </summary>
     public const string GradingSystem = """
         You are a strict but fair language examiner. You compare a learner's answer with the reference
         and return only JSON. Judge meaning first, then grammar, then style.
         Accept any semantically equivalent answer even if wording differs; do not penalise valid alternatives.
         """;
 
+    /// <summary>
+    /// Системный промпт для оценки произношения.
+    /// Настраивает модель как тренера, который сравнивает речь ученика с эталоном и указывает конкретные ошибки в звуках.
+    /// </summary>
     public const string PronunciationSystem = """
         You are a pronunciation coach. You receive the target phrase, the learner transcript and optional
         acoustic measurements. You compare them phonetically and return only JSON.
         Be specific about sounds the learner struggles with, and always give a concrete way to fix it.
         """;
 
+    /// <summary>
+    /// Системный промпт для словарного помощника.
+    /// Определяет поведение модели при вопросах о значении, употреблении, стиле и грамматике слов.
+    /// Модель должна честно признавать нехватку контекста, а не выдумывать ответ.
+    /// </summary>
     public const string DictionaryAssistantSystem = """
         You help learners use a dictionary. You answer questions about vocabulary meaning, usage,
         register, collocations and grammar in the learner's target language, using the provided
         dictionary context when it is relevant. If the context is insufficient, say so honestly.
         """;
 
+    /// <summary>
+    /// Создаёт промпт для генерации короткого заголовка чата по первому сообщению.
+    /// Заголовок помогает ученику быстро ориентироваться в списке диалогов.
+    /// </summary>
     public static string ChatTitlePrompt(string firstMessage) =>
         $"""
          Summarise this conversation in at most 5 words, in the language of the first message.

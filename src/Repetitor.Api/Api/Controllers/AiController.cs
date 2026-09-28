@@ -23,6 +23,11 @@ public sealed class AiController(
     IOptions<AiOptions> aiOptions,
     IOptions<LearningOptions> learningOptions) : ControllerBase
 {
+    /// <summary>
+    /// Возвращает список всех сконфигурированных провайдеров ИИ с их настройками.
+    /// Позволяет клиенту отображать доступные модели и их возможности (стриминг, JSON-режим, измерения эмбеддингов).
+    /// Доступен без аутентификации, так как информация не содержит секретных данных.
+    /// </summary>
     [HttpGet("providers")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AiProviderResponse[]), StatusCodes.Status200OK)]
@@ -38,6 +43,11 @@ public sealed class AiController(
         return Ok(result);
     }
 
+    /// <summary>
+    /// Проверяет работоспособность указанного провайдера ИИ, отправляя тестовый запрос.
+    /// Измеряет задержку ответа и возвращает используемую модель.
+    /// При ошибке возвращает 503 с описанием проблемы, что позволяет мониторингу отслеживать состояние сервисов.
+    /// </summary>
     [HttpPost("providers/{name}/health")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
@@ -75,6 +85,11 @@ public sealed class AiController(
         }
     }
 
+    /// <summary>
+    /// Возвращает статистику использования ИИ за указанный период (по умолчанию 30 дней).
+    /// Администраторы и преподаватели могут просматривать статистику всех пользователей,
+    /// остальные пользователи видят только свои данные. Включает разбивку по провайдерам и дням.
+    /// </summary>
     [HttpGet("usage")]
     [Authorize]
     [ProducesResponseType(typeof(AiUsageResponse), StatusCodes.Status200OK)]
@@ -112,6 +127,11 @@ public sealed class AiController(
             Math.Round(logs.Sum(l => l.EstimatedCostUsd), 6), byProvider, byDay));
     }
 
+    /// <summary>
+    /// Пересоздаёт индекс эмбеддингов словаря для полнотекстового и семантического поиска.
+    /// Позволяет указать провайдера, размер пакета и ограничение на количество записей.
+    /// Параметр force принудительно пересоздаёт существующие эмбеддинги.
+    /// </summary>
     [HttpPost("dictionary/reindex")]
     [Authorize(Roles = "Admin,Teacher")]
     [ProducesResponseType(typeof(ReindexResponse), StatusCodes.Status200OK)]
@@ -121,6 +141,11 @@ public sealed class AiController(
         return Ok(new ReindexResponse(report.Processed, report.Created, report.Failed));
     }
 
+    /// <summary>
+    /// Возвращает текущие ограничения системы: лимиты на импорт слов, размер колоды,
+    /// количество бесплатных вызовов ИИ в день, параметры повторений и поддерживаемые типы упражнений.
+    /// Используется клиентом для отображения актуальных ограничений и настройки пользовательского интерфейса.
+    /// </summary>
     [HttpGet("limits")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
@@ -153,6 +178,16 @@ public sealed class AdminController(
     IDbContextFactory<AppDbContext> dbFactory,
     IClock clock) : ControllerBase
 {
+    /// <summary>
+    /// Возвращает агрегированную статистику платформы для панели администратора.
+    /// Включает количество пользователей, активных за 7 дней, контент (курсы, уроки, слова),
+    /// статистику повторений, упражнений и использования ИИ с оценкой стоимости.
+    /// </summary>
+    /// <summary>
+    /// Возвращает агрегированную статистику платформы для панели администратора.
+    /// Включает количество пользователей, активных за 7 дней, контент (курсы, уроки, слова),
+    /// статистику повторений, упражнений и использования ИИ с оценкой стоимости.
+    /// </summary>
     [HttpGet("stats")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> Stats(CancellationToken ct)
@@ -180,6 +215,16 @@ public sealed class AdminController(
         });
     }
 
+    /// <summary>
+    /// Возвращает постраничный список пользователей с возможностью поиска по email или имени.
+    /// Поиск нормализует введённый текст для регистронезависимого сравнения.
+    /// Результат включает основные профильные данные: роль, уровень, XP, серию дней и статус аккаунта.
+    /// </summary>
+    /// <summary>
+    /// Возвращает постраничный список пользователей с возможностью поиска по email или имени.
+    /// Поиск нормализует введённый текст для регистронезависимого сравнения.
+    /// Результат включает основные профильные данные: роль, уровень, XP, серию дней и статус аккаунта.
+    /// </summary>
     [HttpGet("users")]
     [ProducesResponseType(typeof(PagedResponse<object>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<object>>> Users([FromQuery] PagedRequest request, [FromQuery] string? query, CancellationToken ct)
@@ -209,6 +254,14 @@ public sealed class AdminController(
         return Ok(new PagedResponse<object>(rows.Cast<object>().ToArray(), page, request.PageSize, total));
     }
 
+    /// <summary>
+    /// Изменяет роль пользователя (например, назначение преподавателя или снятие прав администратора).
+    /// Возвращает 404, если пользователь с указанным идентификатором не найден.
+    /// </summary>
+    /// <summary>
+    /// Изменяет роль пользователя (например, назначение преподавателя или снятие прав администратора).
+    /// Возвращает 404, если пользователь с указанным идентификатором не найден.
+    /// </summary>
     [HttpPatch("users/{id}/role")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetRole(Guid id, [FromQuery] UserRole role, CancellationToken ct)
@@ -225,6 +278,16 @@ public sealed class AdminController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Активирует или деактивирует аккаунт пользователя.
+    /// Деактивированный пользователь теряет доступ к системе, но его данные сохраняются.
+    /// Возвращает 404, если пользователь не найден.
+    /// </summary>
+    /// <summary>
+    /// Активирует или деактивирует аккаунт пользователя.
+    /// Деактивированный пользователь теряет доступ к системе, но его данные сохраняются.
+    /// Возвращает 404, если пользователь не найден.
+    /// </summary>
     [HttpPatch("users/{id}/active")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetActive(Guid id, [FromQuery] bool active = true, CancellationToken ct = default)
@@ -241,6 +304,16 @@ public sealed class AdminController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Удаляет журналы вызовов ИИ старше указанного количества дней (по умолчанию 30).
+    /// Используется для освобождения места в базе данных и соблюдения политики хранения данных.
+    /// Операция необратима — удалённые записи восстановить невозможно.
+    /// </summary>
+    /// <summary>
+    /// Удаляет журналы вызовов ИИ старше указанного количества дней (по умолчанию 30).
+    /// Используется для освобождения места в базе данных и соблюдения политики хранения данных.
+    /// Операция необратима — удалённые записи восстановить невозможно.
+    /// </summary>
     [HttpDelete("ai-logs")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> PurgeAiLogs([FromQuery] int olderThanDays = 30, CancellationToken ct = default)

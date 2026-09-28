@@ -20,6 +20,11 @@ public sealed class UsersController(
     IClock clock,
     IOptions<LearningOptions> learningOptions) : ControllerBase
 {
+    /// <summary>
+    /// Возвращает полный профиль текущего аутентифицированного пользователя.
+    /// Включает информацию о языках обучения, уровне, статистике и настройках.
+    /// Используется для отображения личного кабинета и страницы настроек.
+    /// </summary>
     [HttpGet("me")]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<UserResponse>> GetProfile(CancellationToken ct)
@@ -28,6 +33,12 @@ public sealed class UsersController(
         return user is null ? Unauthorized() : Ok(user.ToResponse());
     }
 
+    /// <summary>
+    /// Обновляет настройки профиля текущего пользователя.
+    /// Позволяет изменить отображаемое имя, аватар, языки обучения,
+    /// уровень, дневную цель XP, скорость речи и другие параметры.
+    /// Принимает только переданные поля — остальные остаются без изменений.
+    /// </summary>
     [HttpPatch("me")]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<UserResponse>> UpdateProfile(UpdateProfileRequest request, CancellationToken ct)
@@ -120,6 +131,12 @@ public sealed class UsersController(
         return Ok(tracked.ToResponse());
     }
 
+    /// <summary>
+    /// Возвращает агрегированные данные для дашборда пользователя.
+    /// Включает статистику изучения слов, количество карточек к повторению,
+    /// активность за период, рекомендуемые слова и прогресс по дневной цели.
+    /// Параметр activityDays определяет глубину истории (1–90 дней).
+    /// </summary>
     [HttpGet("me/dashboard")]
     [ProducesResponseType(typeof(DashboardResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<DashboardResponse>> Dashboard([FromQuery] int activityDays = 14, CancellationToken ct = default)
@@ -196,6 +213,12 @@ public sealed class UsersController(
             activity));
     }
 
+    /// <summary>
+    /// Возвращает ежедневную статистику активности пользователя за указанный период.
+    /// Содержит данные о заработанном XP, количестве повторений, правильных ответах,
+    /// новых словах и времени обучения для каждого дня. Используется для графиков
+    /// и визуализации прогресса обучения.
+    /// </summary>
     [HttpGet("me/stats")]
     [ProducesResponseType(typeof(ActivityResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ActivityResponse[]>> Stats([FromQuery] int days = 30, CancellationToken ct = default)
@@ -215,6 +238,12 @@ public sealed class UsersController(
         return Ok(stats);
     }
 
+    /// <summary>
+    /// Возвращает текущий прогресс по дневной цели XP.
+    /// Показывает, сколько XP заработано сегодня, достигнута ли цель,
+    /// а также текущую и максимальную серию дней подряд (streak).
+    /// Используется для отображения виджета цели на главной странице.
+    /// </summary>
     [HttpGet("me/goal")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> Goal(CancellationToken ct)

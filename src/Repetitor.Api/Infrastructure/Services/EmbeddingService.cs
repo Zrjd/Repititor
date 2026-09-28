@@ -27,10 +27,25 @@ public sealed record ReindexReport(int Processed, int Created, int Failed);
 
 public interface IEmbeddingService
 {
+    /// <summary>
+    /// Определяет имя провайдера эмбеддингов по умолчанию, если конкретный не задан.
+    /// </summary>
     string ResolveProvider(string? provider);
+    /// <summary>
+    /// Возвращает размерность векторов эмбеддингов для указанного провайдера.
+    /// </summary>
     int DimensionsFor(string provider);
+    /// <summary>
+    /// Проверяет, является ли провайдер локальным (работает на собственных серверах).
+    /// </summary>
     bool IsLocalProvider(string provider);
+    /// <summary>
+    /// Гарантирует, что для указанных лексических единиц есть актуальные эмбеддинги.
+    /// </summary>
     Task EnsureEmbeddingsAsync(IReadOnlyCollection<Guid> lexicalUnitIds, string? provider, CancellationToken ct = default);
+    /// <summary>
+    /// Пересчитывает эмбеддинги для всех лексических единиц в базе.
+    /// </summary>
     Task<ReindexReport> ReindexAsync(string? provider, int batchSize, int limit, bool force, CancellationToken ct = default);
 }
 
@@ -42,12 +57,22 @@ public sealed class EmbeddingService(
 {
     private readonly AiOptions _options = options.Value;
 
+    /// <summary>
+    /// Возвращает имя провайдера эмбеддингов: переданное или значение по умолчанию из настроек.
+    /// </summary>
     public string ResolveProvider(string? provider) => provider ?? _options.DefaultEmbeddingProvider;
 
+    /// <summary>
+    /// Возвращает размерность векторов для провайдера: локальные модели обычно используют меньшую размерность.
+    /// </summary>
     public int DimensionsFor(string provider) => IsLocalProvider(provider)
         ? _options.EmbeddingLocalDimensions
         : _options.EmbeddingDimensions;
 
+    /// <summary>
+    /// Определяет, работает ли провайдер локально (например, Ollama).
+    /// От этого зависит, в какое поле базы сохранять эмбеддинги.
+    /// </summary>
     public bool IsLocalProvider(string provider) =>
         _options.Providers.TryGetValue(provider, out var p) &&
         p.Kind.Equals("ollama", StringComparison.OrdinalIgnoreCase);
@@ -55,6 +80,10 @@ public sealed class EmbeddingService(
     private static string ColumnFor(string provider) =>
         provider.Equals("ollama", StringComparison.OrdinalIgnoreCase) ? "embedding_local" : "embedding";
 
+    /// <summary>
+    /// Проверяет и создаёт эмбеддинги для указанных лексических единиц при необходимости.
+    /// Единицы с неизменённым содержимым пропускаются, чтобы не тратить ресурсы провайдера.
+    /// </summary>
     public async Task EnsureEmbeddingsAsync(IReadOnlyCollection<Guid> lexicalUnitIds, string? provider, CancellationToken ct = default)
     {
         if (lexicalUnitIds.Count == 0)
@@ -115,6 +144,10 @@ public sealed class EmbeddingService(
         }
     }
 
+    /// <summary>
+    /// Пересчитывает эмбеддинги для лексических единиц порциями.
+    /// При ошибке в одной порции пересчёт останавливается, а отчёт содержит число обработанных и неудачных единиц.
+    /// </summary>
     public async Task<ReindexReport> ReindexAsync(string? provider, int batchSize, int limit, bool force, CancellationToken ct = default)
     {
         var providerName = ResolveProvider(provider);
@@ -271,6 +304,9 @@ internal sealed class EmbeddingStamp
 
 public interface IVectorSearchService
 {
+    /// <summary>
+    /// Ищет лексические единицы, близкие по смыслу к запросу.
+    /// </summary>
     Task<IReadOnlyList<SemanticMatch>> SearchAsync(
         string query,
         Guid languageId,
@@ -282,6 +318,9 @@ public interface IVectorSearchService
         Guid? excludeLexicalUnitId = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Ищет лексические единицы, близкие по смыслу к указанным единицам.
+    /// </summary>
     Task<IReadOnlyList<SemanticMatch>> SearchByIdsAsync(
         IReadOnlyList<Guid> lexicalUnitIds,
         string? provider,
@@ -302,6 +341,11 @@ public sealed class VectorSearchService(
     private static string ColumnFor(string provider) =>
         provider.Equals("ollama", StringComparison.OrdinalIgnoreCase) ? "embedding_local" : "embedding";
 
+    /// <summary>
+    /// Выполняет семантический поиск лексических единиц по текстовому запросу.
+    /// Запрос превращается в вектор, который сравнивается с сохранёнными эмбеддингами в базе.
+    /// Поддерживаются фильтры по языку, уровню и исключение конкретной единицы.
+    /// </summary>
     public async Task<IReadOnlyList<SemanticMatch>> SearchAsync(
         string query,
         Guid languageId,
@@ -385,6 +429,10 @@ public sealed class VectorSearchService(
         return results;
     }
 
+    /// <summary>
+    /// Ищет единицы, близкие по смыслу к заданным единицам, по нескольким соседям на каждую.
+    /// Используется, например, для подбора дополнительной лексики по уже выбранным словам.
+    /// </summary>
     public async Task<IReadOnlyList<SemanticMatch>> SearchByIdsAsync(
         IReadOnlyList<Guid> lexicalUnitIds,
         string? provider,

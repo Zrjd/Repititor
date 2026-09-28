@@ -6,6 +6,10 @@ namespace Repetitor.Api.Infrastructure.Persistence.Configurations;
 
 public sealed class LanguageConfiguration : IEntityTypeConfiguration<Language>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности Language с таблицей languages.
+    /// Определяет параметры языков, включая код, названия на разных языках и подсказку голоса TTS.
+    /// </summary>
     public void Configure(EntityTypeBuilder<Language> b)
     {
         b.ToTable("languages");
@@ -22,6 +26,10 @@ public sealed class LanguageConfiguration : IEntityTypeConfiguration<Language>
 
 public sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности Course с таблицей courses.
+    /// Определяет параметры курсов, включая slug, название, уровень и связь с языком.
+    /// </summary>
     public void Configure(EntityTypeBuilder<Course> b)
     {
         b.ToTable("courses");
@@ -41,6 +49,10 @@ public sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
 
 public sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности Lesson с таблицей lessons.
+    /// Определяет параметры уроков, включая slug, содержимое и связи с курсом и грамматической темой.
+    /// </summary>
     public void Configure(EntityTypeBuilder<Lesson> b)
     {
         b.ToTable("lessons");
@@ -60,6 +72,10 @@ public sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
 
 public sealed class GrammarTopicConfiguration : IEntityTypeConfiguration<GrammarTopic>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности GrammarTopic с таблицей grammar_topics.
+    /// Определяет параметры грамматических тем, включая slug, заголовок и минимальный уровень.
+    /// </summary>
     public void Configure(EntityTypeBuilder<GrammarTopic> b)
     {
         b.ToTable("grammar_topics");
@@ -77,6 +93,10 @@ public sealed class GrammarTopicConfiguration : IEntityTypeConfiguration<Grammar
 
 public sealed class CourseEnrollmentConfiguration : IEntityTypeConfiguration<CourseEnrollment>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности CourseEnrollment с таблицей course_enrollments.
+    /// Определяет параметры записи на курс, включая даты регистрации и завершения.
+    /// </summary>
     public void Configure(EntityTypeBuilder<CourseEnrollment> b)
     {
         b.ToTable("course_enrollments");
@@ -93,6 +113,10 @@ public sealed class CourseEnrollmentConfiguration : IEntityTypeConfiguration<Cou
 
 public sealed class LessonProgressConfiguration : IEntityTypeConfiguration<LessonProgress>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности LessonProgress с таблицей lesson_progress.
+    /// Определяет параметры прогресса по урокам, включая статус и даты начала и завершения.
+    /// </summary>
     public void Configure(EntityTypeBuilder<LessonProgress> b)
     {
         b.ToTable("lesson_progress");

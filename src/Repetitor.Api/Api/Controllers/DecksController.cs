@@ -22,6 +22,11 @@ public sealed class DecksController(
 {
     private readonly LearningOptions _learning = learningOptions.Value;
 
+    /// <summary>
+    /// Возвращает список колод текущего пользователя.
+    /// По умолчанию показывает только активные колоды; при includeArchived = true включает и архивные.
+    /// Для каждой колоды подсчитывает количество карточек к повторению, новых и выученных.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(DeckResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<DeckResponse[]>> List([FromQuery] bool includeArchived = false, CancellationToken ct = default)
@@ -42,6 +47,11 @@ public sealed class DecksController(
             d.Cards.Count(c => c.UserLexicalUnit!.State == CardState.Mastered))).ToArray());
     }
 
+    /// <summary>
+    /// Возвращает подробную информацию о конкретной колоде.
+    /// Включает статистику: сколько карточек готово к повторению, сколько новых и сколько уже выучено.
+    /// Используется для страницы просмотра колоды перед началом практики.
+    /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(DeckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -65,6 +75,11 @@ public sealed class DecksController(
             deck.Cards.Count(c => c.UserLexicalUnit!.State == CardState.Mastered)));
     }
 
+    /// <summary>
+    /// Возвращает список карточек (слов) в указанной колоде с пагинацией.
+    /// Карточки сортируются по позиции в колоде (порядку добавления).
+    /// Используется для просмотра содержимого колоды.
+    /// </summary>
     [HttpGet("{id}/cards")]
     [ProducesResponseType(typeof(UserWordResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<UserWordResponse[]>> Cards(Guid id, [FromQuery] PagedRequest request, CancellationToken ct)
@@ -94,6 +109,11 @@ public sealed class DecksController(
             rows.Select(r => r.ToResponse()).ToArray(), page, request.PageSize, total));
     }
 
+    /// <summary>
+    /// Создаёт новую колоду карточек.
+    /// В запросе можно указать название, описание, язык, обложку (эмодзи) и теги.
+    /// Также можно сразу передать список слов, которые будут добавлены в колоду.
+    /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(DeckResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<DeckResponse>> Create(CreateDeckRequest request, CancellationToken ct)
@@ -121,6 +141,11 @@ public sealed class DecksController(
         return CreatedAtAction(nameof(Get), new { id = deck.Id }, deck.ToResponse(0, 0, 0));
     }
 
+    /// <summary>
+    /// Обновляет название, описание или другие параметры колоды.
+    /// Обновляются только те поля, которые переданы в запросе.
+    /// Также позволяет архивировать колоду (IsArchived), чтобы скрыть её из списка активных.
+    /// </summary>
     [HttpPatch("{id}")]
     [ProducesResponseType(typeof(DeckResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<DeckResponse>> Update(Guid id, UpdateDeckRequest request, CancellationToken ct)
@@ -144,6 +169,11 @@ public sealed class DecksController(
         return Ok(deck.ToResponse(0, 0, 0));
     }
 
+    /// <summary>
+    /// Полностью удаляет колоду вместе со всеми связями с карточками.
+    /// Сами слова при этом не удаляются из словаря и личного словаря пользователя.
+    /// Действие необратимо — колоду восстановить будет нельзя.
+    /// </summary>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
@@ -161,6 +191,11 @@ public sealed class DecksController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Добавляет слова в существующую колоду.
+    /// Возвращает количество фактически добавленных карточек (без дубликатов) и общий размер колоды.
+    /// Если слово уже есть у пользователя, оно будет привязано к колоде; если нет — будет добавлено в личный словарь.
+    /// </summary>
     [HttpPost("{id}/cards")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> AddCards(Guid id, DeckCardsRequest request, CancellationToken ct)
@@ -177,6 +212,11 @@ public sealed class DecksController(
         return Ok(new { added, requested = request.LexicalUnitIds.Length, deckSize = await db.DeckCards.CountAsync(dc => dc.DeckId == id) });
     }
 
+    /// <summary>
+    /// Удаляет карточку из колоды, но не из словаря.
+    /// Слово остаётся в личном словаре пользователя и продолжит участвовать в повторениях, просто исчезнет из этой колоды.
+    /// Используется для наполнения колоды только теми словами, которые пользователь хочет повторять в данном контексте.
+    /// </summary>
     [HttpDelete("{id}/cards/{lexicalUnitId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> RemoveCard(Guid id, Guid lexicalUnitId, CancellationToken ct)
@@ -198,6 +238,11 @@ public sealed class DecksController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Сбрасывает прогресс изучения всех карточек в колоде.
+    /// Все интервалы, повторения и статистика обнуляются — карточки становятся "новыми" и готовы к повторению с нуля.
+    /// Используется, если пользователь хочет начать изучение колоды заново.
+    /// </summary>
     [HttpPost("{id}/reset-progress")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> ResetProgress(Guid id, CancellationToken ct)

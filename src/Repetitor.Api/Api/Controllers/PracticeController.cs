@@ -16,6 +16,11 @@ public sealed class PracticeController(
     IEmbeddingService embeddings,
     IDbContextFactory<AppDbContext> dbFactory) : ControllerBase
 {
+    /// <summary>
+    /// Возвращает карточки, которые готовы к повторению (due cards).
+    /// Используется для начала сессии практики — показывает пользователю, что нужно повторить сейчас.
+    /// Можно фильтровать по конкретной колоде через deckId и ограничивать количество через limit.
+    /// </summary>
     [HttpGet("due")]
     [ProducesResponseType(typeof(PracticeSessionResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PracticeSessionResponse>> Due([FromQuery] Guid? deckId, [FromQuery] int limit = 20, CancellationToken ct = default)
@@ -27,6 +32,11 @@ public sealed class PracticeController(
         return Ok(new PracticeSessionResponse(cards.Select(c => c.ToResponse()).ToArray(), total, cards.Count));
     }
 
+    /// <summary>
+    /// Возвращает количество карточек, готовых к повторению.
+    /// Нужен для отображения счётчика "сколько карточек ждёт повторения" без загрузки самих карточек.
+    /// Полезно для бейджей и уведомлений в интерфейсе.
+    /// </summary>
     [HttpGet("due/count")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> DueCount([FromQuery] Guid? deckId, CancellationToken ct)
@@ -35,6 +45,11 @@ public sealed class PracticeController(
         return Ok(new { due = await practice.CountDueAsync(userId, deckId, ct) });
     }
 
+    /// <summary>
+    /// Строит прогноз нагрузки на ближайшие 14 дней.
+    /// Показывает, сколько карточек будет готово к повторению каждый день, чтобы пользователь мог спланировать своё время.
+    /// Используется для визуализации расписания повторений в календаре или графике.
+    /// </summary>
     [HttpGet("forecast")]
     [ProducesResponseType(typeof(PracticeSummaryResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PracticeSummaryResponse>> Forecast([FromQuery] Guid? deckId, CancellationToken ct)
@@ -68,6 +83,11 @@ public sealed class PracticeController(
             0, 0, 0, 0, 0, 0, await practice.CountDueAsync(userId, deckId, ct), forecast));
     }
 
+    /// <summary>
+    /// Принимает результаты повторения карточек и обновляет их состояние.
+    /// Сохраняет оценку пользователя, затраченное время и данный ответ для каждой карточки.
+    /// После этого алгоритм интервальных повторений пересчитывает дату следующего показа карточки.
+    /// </summary>
     [HttpPost("reviews")]
     [ProducesResponseType(typeof(ReviewResultResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ReviewResultResponse[]>> Submit(ReviewSubmissionRequest request, CancellationToken ct)
@@ -81,6 +101,11 @@ public sealed class PracticeController(
         return Ok(results.Select(r => r.ToResponse()).ToArray());
     }
 
+    /// <summary>
+    /// Возвращает сводку по завершённой сессии практики.
+    /// Показывает статистику: сколько карточек повторено, сколько правильных ответов, заработано XP и прогноз на 14 дней.
+    /// Используется для экрана результатов после завершения сессии повторения.
+    /// </summary>
     [HttpPost("summary")]
     [ProducesResponseType(typeof(PracticeSummaryResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PracticeSummaryResponse>> Summary([FromQuery] Guid? deckId, [FromQuery] int reviewed = 0, [FromQuery] int correct = 0, [FromQuery] int again = 0, [FromQuery] int newSeen = 0, [FromQuery] int xp = 0, CancellationToken ct = default)
@@ -115,6 +140,11 @@ public sealed class PracticeController(
             summary.AccuracyPercent, summary.RemainingDue, forecast));
     }
 
+    /// <summary>
+    /// Приостанавливает или возобновляет показ карточки в повторениях.
+    /// Приостановленная карточка не будет появляться в сессиях практики, пока пользователь не снимет приостановку.
+    /// Полезно, когда пользователь хочет временно исключить слово из повторения без удаления.
+    /// </summary>
     [HttpPost("suspend/{reviewCardId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Suspend(Guid reviewCardId, [FromQuery] bool suspended = true, CancellationToken ct = default)
@@ -135,6 +165,11 @@ public sealed class PracticeController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Предварительно вычисляет и сохраняет векторные представления (embeddings) для последних добавленных слов пользователя.
+    /// Нужен для ускорения семантического поиска — без предварительного вычисления поиск будет медленным.
+    /// Рекомендуется вызывать после массового импорта слов или добавления новых карточек.
+    /// </summary>
     [HttpPost("prefetch-embeddings")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Prefetch([FromQuery] int limit = 200, CancellationToken ct = default)

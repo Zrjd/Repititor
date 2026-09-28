@@ -29,6 +29,10 @@ public sealed class AiGateway : IAiGateway
     private readonly ILogger<AiGateway> _logger;
     private readonly Dictionary<string, Lazy<AiProviderBundle>> _cache = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Создаёт экземпляр AiGateway с необходимыми зависимостями.
+    /// Инициализирует доступ к настройкам, HTTP-клиентам, базе данных и логгеру.
+    /// </summary>
     public AiGateway(
         IOptions<AiOptions> options,
         IHttpClientFactory httpClientFactory,
@@ -41,6 +45,10 @@ public sealed class AiGateway : IAiGateway
         _logger = logger;
     }
 
+    /// <summary>
+    /// Возвращает описание всех включённых AI-провайдеров.
+    /// Используется для отображения доступных провайдеров в административной панели.
+    /// </summary>
     public IReadOnlyList<AiProviderDescriptor> DescribeProviders() =>
         _options.Providers
             .Where(p => p.Value.Enabled)
@@ -49,24 +57,44 @@ public sealed class AiGateway : IAiGateway
             .ThenBy(p => p.Name)
             .ToArray();
 
+    /// <summary>
+    /// Возвращает клиент для работы с чатом от указанного или провайдера по умолчанию.
+    /// Выбрасывает исключение, если провайдер не поддерживает чат.
+    /// </summary>
     public IChatCompletionClient ResolveChat(string? provider = null) => Get(provider ?? _options.DefaultChatProvider).Chat
         ?? throw new AiProviderException(provider ?? _options.DefaultChatProvider, null, "Provider has no chat capability");
 
+    /// <summary>
+    /// Возвращает клиент для создания эмбеддингов от указанного или провайдера по умолчанию.
+    /// Выбрасывает исключение, если провайдер не поддерживает эмбеддинги.
+    /// </summary>
     public IEmbeddingClient ResolveEmbedding(string? provider = null) => Get(provider ?? _options.DefaultEmbeddingProvider).Embedding
         ?? throw new AiProviderException(provider ?? _options.DefaultEmbeddingProvider, null, "Provider has no embedding capability");
 
+    /// <summary>
+    /// Возвращает клиент для синтеза речи или null, если провайдер не поддерживает TTS.
+    /// Позволяет гибко настраивать, какие провайдеры могут использоваться для озвучки.
+    /// </summary>
     public ISpeechSynthesisClient? ResolveSpeechSynthesis(string? provider = null)
     {
         var bundle = Get(provider ?? _options.DefaultChatProvider);
         return bundle.Speech;
     }
 
+    /// <summary>
+    /// Возвращает клиент для распознавания речи или null, если провайдер не поддерживает STT.
+    /// Позволяет гибко настраивать, какие провайдеры могут использоваться для транскрибации.
+    /// </summary>
     public ISpeechRecognitionClient? ResolveSpeechRecognition(string? provider = null)
     {
         var bundle = Get(provider ?? _options.DefaultChatProvider);
         return bundle.Recognition;
     }
 
+    /// <summary>
+    /// Выполняет запрос к модели чата с логированием и обработкой ошибок.
+    /// Записывает информацию о вызове в базу данных для анализа стоимости и использования.
+    /// </summary>
     public async Task<AiChatResult> CompleteAsync(
         AiChatRequest request,
         AiOperation operation,
@@ -98,6 +126,10 @@ public sealed class AiGateway : IAiGateway
         }
     }
 
+    /// <summary>
+    /// Выполняет запрос к модели чата с требованием вернуть JSON по указанной схеме.
+    /// Используется для структурированного ответа модели, например, при проверке заданий.
+    /// </summary>
     public async Task<JsonNode> CompleteJsonAsync(
         JsonNode schemaHint,
         string systemPrompt,
@@ -127,6 +159,10 @@ public sealed class AiGateway : IAiGateway
         return AiJson.Extract(result.Content);
     }
 
+    /// <summary>
+    /// Создаёт эмбеддинги для списка текстов с логированием и обработкой ошибок.
+    /// Записывает информацию о вызове в базу данных для анализа стоимости.
+    /// </summary>
     public async Task<AiEmbeddingResult> EmbedAsync(IReadOnlyList<string> inputs, string? provider = null, CancellationToken ct = default)
     {
         if (inputs.Count == 0)
@@ -283,11 +319,19 @@ public sealed class AiGateway : IAiGateway
 
 public static class AiHttpClientNames
 {
+    /// <summary>
+    /// Формирует уникальное имя HTTP-клиента для провайдера.
+    /// Используется для разделения настроек и кэширования клиентов по типам провайдеров.
+    /// </summary>
     public static string For(string providerName, bool isOllama) => $"ai:{(isOllama ? "ollama" : "openai")}:{providerName}";
 }
 
 public static class AiJson
 {
+    /// <summary>
+    /// Извлекает JSON из ответа модели, обрабатывая различные форматы.
+    /// Поддерживает чистый JSON, JSON в markdown-блоках и JSON с лишним текстом вокруг.
+    /// </summary>
     public static JsonNode Extract(string raw)
     {
         var text = raw.Trim();

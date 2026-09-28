@@ -13,16 +13,40 @@ public sealed class OllamaClient(
     AiProviderOptions options,
     AiOptions aiOptions) : IOllamaClient
 {
+    /// <summary>
+    /// Возвращает имя провайдера Ollama.
+    /// Используется для идентификации провайдера в логах и при обработке ошибок.
+    /// </summary>
     public string Name => providerName;
+    /// <summary>
+    /// Возвращает тип провайдера — Ollama.
+    /// Нужен для определения, что используется локальный сервер Ollama.
+    /// </summary>
     public AiProviderKind Kind => AiProviderKind.Ollama;
+    /// <summary>
+    /// Возвращает модель чата по умолчанию для Ollama.
+    /// Если в конфигурации не указана модель, используется "qwen2.5:7b-instruct".
+    /// </summary>
     public string ChatModel => string.IsNullOrWhiteSpace(options.ChatModel) ? "qwen2.5:7b-instruct" : options.ChatModel;
+    /// <summary>
+    /// Возвращает модель для создания эмбеддингов в Ollama.
+    /// Если в конфигурации не указана модель, используется "mxbai-embed-large".
+    /// </summary>
     public string EmbeddingModel => string.IsNullOrWhiteSpace(options.EmbeddingModel) ? "mxbai-embed-large" : options.EmbeddingModel;
+    /// <summary>
+    /// Указывает, что Ollama поддерживает режим JSON-ответа.
+    /// В этом режиме модель возвращает валидный JSON.
+    /// </summary>
     public bool SupportsJsonMode => true;
 
     int IEmbeddingClient.Dimensions => aiOptions.EmbeddingLocalDimensions;
 
     private HttpClient Http { get; } = http;
 
+    /// <summary>
+    /// Отправляет запрос к модели чата Ollama и возвращает полный ответ.
+    /// Используется для получения результата одним блоком без стриминга.
+    /// </summary>
     public async Task<AiChatResult> CompleteAsync(AiChatRequest request, CancellationToken ct = default)
     {
         var payload = BuildChatPayload(request, stream: false);
@@ -44,6 +68,10 @@ public sealed class OllamaClient(
         };
     }
 
+    /// <summary>
+    /// Отправляет запрос к модели чата Ollama и возвращает ответ в виде потока токенов.
+    /// Позволяет отображать ответ по мере его генерации в реальном времени.
+    /// </summary>
     public async IAsyncEnumerable<string> StreamAsync(AiChatRequest request, [EnumeratorCancellation] CancellationToken ct = default)
     {
         var payload = BuildChatPayload(request, stream: true);
@@ -86,6 +114,10 @@ public sealed class OllamaClient(
         }
     }
 
+    /// <summary>
+    /// Создаёт эмбеддинги для списка текстов через API Ollama.
+    /// При ошибке с несколькими входными данными автоматически пробует устаревший API.
+    /// </summary>
     public async Task<AiEmbeddingResult> EmbedAsync(AiEmbeddingRequest request, CancellationToken ct = default)
     {
         var model = string.IsNullOrWhiteSpace(request.Model) ? EmbeddingModel : request.Model;
@@ -141,6 +173,10 @@ public sealed class OllamaClient(
         };
     }
 
+    /// <summary>
+    /// Получает список доступных моделей с сервера Ollama.
+    /// Используется для проверки, какие модели загружены на сервере.
+    /// </summary>
     public async Task<IReadOnlyList<string>> ListModelsAsync(CancellationToken ct = default)
     {
         using var response = await Http.GetAsync(AiHttp.Resolve(options.BaseUrl, "api/tags"), ct);

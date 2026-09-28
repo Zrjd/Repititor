@@ -26,6 +26,12 @@ public sealed class AuthController(
     IEmailService emailService,
     ILogger<AuthController> logger) : ControllerBase
 {
+    /// <summary>
+    /// Регистрирует нового пользователя в системе.
+    /// Создаёт аккаунт с указанным email и паролем, проверяет уникальность email,
+    /// устанавливает языки по умолчанию и выдаёт пару токенов доступа.
+    /// Также создаёт стартодеку "Мои слова" для нового пользователя.
+    /// </summary>
     [HttpPost("register")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
@@ -98,6 +104,11 @@ public sealed class AuthController(
         return await IssueAsync(db, user, target, interfaceLang, ct);
     }
 
+    /// <summary>
+    /// Аутентифицирует пользователя по email и паролю.
+    /// Проверяет учётные данные, при необходимости перехеширует пароль
+    /// и выдаёт новую пару токенов доступа (access + refresh).
+    /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
@@ -132,6 +143,12 @@ public sealed class AuthController(
         return await IssueAsync(db, user, user.TargetLanguage!, user.InterfaceLanguage!, ct);
     }
 
+    /// <summary>
+    /// Обновляет пару токенов доступа по refresh-токену.
+    /// Реализует механизм ротации: старый refresh-токен отзывается,
+    /// а пользователь получает новую пару токенов. Это повышает безопасность,
+    /// предотвращая повторное использование скомпрометированных токенов.
+    /// </summary>
     [HttpPost("refresh")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
@@ -183,6 +200,11 @@ public sealed class AuthController(
         return Ok(BuildResponse(pair, user, user.TargetLanguage!, user.InterfaceLanguage!));
     }
 
+    /// <summary>
+    /// Завершает текущую сессию пользователя, отзывая указанный refresh-токен.
+    /// Токен может быть передан в заголовке X-Refresh-Token или в теле запроса.
+    /// Если токен не передан, запрос считается успешным без ошибки.
+    /// </summary>
     [HttpPost("logout")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -209,6 +231,11 @@ public sealed class AuthController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Завершает все активные сессии пользователя, отзывая все его refresh-токены.
+    /// Используется, например, при подозрении на компрометацию аккаунта
+    /// или при смене пароля для принудительного перелогина на всех устройствах.
+    /// </summary>
     [HttpPost("logout-all")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -222,6 +249,12 @@ public sealed class AuthController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Возвращает профиль текущего аутентифицированного пользователя.
+    /// Содержит информацию о пользователе, включая языки обучения,
+    /// уровень, статистику и настройки. Используется для отображения
+    /// личного кабинета и настроек профиля.
+    /// </summary>
     [HttpGet("me")]
     [Authorize]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
@@ -237,6 +270,11 @@ public sealed class AuthController(
         return user is null ? Unauthorized() : Ok(user.ToResponse());
     }
 
+    /// <summary>
+    /// Изменяет пароль текущего пользователя.
+    /// Проверяет текущий пароль, валидирует новый на сложность,
+    /// обновляет хеш пароля и отзывает все активные сессии для безопасности.
+    /// </summary>
     [HttpPost("change-password")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -274,6 +312,12 @@ public sealed class AuthController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Инициирует процесс восстановления пароля.
+    /// Генерирует токен сброса с ограниченным сроком действия (2 часа)
+    /// и отправляет письмо со ссылкой на указанный email.
+    /// Всегда возвращает успешный ответ, чтобы не раскрывать существование аккаунта.
+    /// </summary>
     [HttpPost("forgot-password")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
@@ -301,6 +345,12 @@ public sealed class AuthController(
         return Accepted(new { message = "Если аккаунт существует, ссылка для сброса отправлена." });
     }
 
+    /// <summary>
+    /// Сбрасывает пароль пользователя по токену восстановления.
+    /// Проверяет валидность и срок действия токена, обновляет пароль
+    /// и отзывает все активные сессии. Токен помечается использованным,
+    /// предотвращая повторное использование.
+    /// </summary>
     [HttpPost("reset-password")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

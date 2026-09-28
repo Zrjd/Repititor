@@ -6,6 +6,10 @@ namespace Repetitor.Api.Infrastructure.Persistence.Configurations;
 
 public sealed class LexicalUnitConfiguration : IEntityTypeConfiguration<LexicalUnit>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности LexicalUnit с таблицей lexical_units.
+    /// Определяет ограничения длины полей, уникальные индексы и связи с языками, обеспечивая целостность словарных данных.
+    /// </summary>
     public void Configure(EntityTypeBuilder<LexicalUnit> b)
     {
         b.ToTable("lexical_units", t =>
@@ -49,6 +53,10 @@ public sealed class LexicalUnitConfiguration : IEntityTypeConfiguration<LexicalU
 
 public sealed class LexicalUnitEmbeddingConfiguration : IEntityTypeConfiguration<LexicalUnitEmbedding>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности LexicalUnitEmbedding с таблицей lexical_unit_embeddings.
+    /// Определяет параметры хранения векторных представлений словарных единиц, включая уникальный индекс по паре единица-провайдер-модель.
+    /// </summary>
     public void Configure(EntityTypeBuilder<LexicalUnitEmbedding> b)
     {
         b.ToTable("lexical_unit_embeddings");
@@ -66,6 +74,10 @@ public sealed class LexicalUnitEmbeddingConfiguration : IEntityTypeConfiguration
 
 public sealed class UserLexicalUnitConfiguration : IEntityTypeConfiguration<UserLexicalUnit>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности UserLexicalUnit с таблицей user_lexical_units.
+    /// Определяет связь пользователя с его словарными единицами, включая состояние изучения и персональные заметки.
+    /// </summary>
     public void Configure(EntityTypeBuilder<UserLexicalUnit> b)
     {
         b.ToTable("user_lexical_units");
@@ -87,6 +99,10 @@ public sealed class UserLexicalUnitConfiguration : IEntityTypeConfiguration<User
 
 public sealed class DeckConfiguration : IEntityTypeConfiguration<Deck>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности Deck с таблицей decks.
+    /// Определяет параметры колод карточек, включая название, описание и связь с пользователем-владельцем.
+    /// </summary>
     public void Configure(EntityTypeBuilder<Deck> b)
     {
         b.ToTable("decks");
@@ -106,6 +122,10 @@ public sealed class DeckConfiguration : IEntityTypeConfiguration<Deck>
 
 public sealed class DeckCardConfiguration : IEntityTypeConfiguration<DeckCard>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности DeckCard с таблицей deck_cards.
+    /// Определяет связь карточек с колодами и словарными единицами пользователя, включая позицию в колоде.
+    /// </summary>
     public void Configure(EntityTypeBuilder<DeckCard> b)
     {
         b.ToTable("deck_cards");
@@ -122,6 +142,10 @@ public sealed class DeckCardConfiguration : IEntityTypeConfiguration<DeckCard>
 
 public sealed class ReviewCardConfiguration : IEntityTypeConfiguration<ReviewCard>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности ReviewCard с таблицей review_cards.
+    /// Определяет параметры карточек для интервального повторения, включая состояние, интервал и коэффициент лёгкости.
+    /// </summary>
     public void Configure(EntityTypeBuilder<ReviewCard> b)
     {
         b.ToTable("review_cards");
@@ -141,6 +165,10 @@ public sealed class ReviewCardConfiguration : IEntityTypeConfiguration<ReviewCar
 
 public sealed class ReviewLogConfiguration : IEntityTypeConfiguration<ReviewLog>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности ReviewLog с таблицей review_logs.
+    /// Определяет параметры журнала повторений, включая оценку, предыдущий и новый интервалы, а также связь с карточкой повторения.
+    /// </summary>
     public void Configure(EntityTypeBuilder<ReviewLog> b)
     {
         b.ToTable("review_logs");
@@ -163,6 +191,10 @@ public sealed class ReviewLogConfiguration : IEntityTypeConfiguration<ReviewLog>
 
 public sealed class UserDailyStatConfiguration : IEntityTypeConfiguration<UserDailyStat>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности UserDailyStat с таблицей user_daily_stats.
+    /// Определяет параметры ежедневной статистики пользователя с уникальным индексом по паре пользователь-дата.
+    /// </summary>
     public void Configure(EntityTypeBuilder<UserDailyStat> b)
     {
         b.ToTable("user_daily_stats");

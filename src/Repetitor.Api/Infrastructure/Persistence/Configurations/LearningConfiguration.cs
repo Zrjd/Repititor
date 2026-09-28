@@ -6,6 +6,10 @@ namespace Repetitor.Api.Infrastructure.Persistence.Configurations;
 
 public sealed class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности Exercise с таблицей exercises.
+    /// Определяет параметры упражнений, включая тип, уровень, темы и связи с курсами и уроками.
+    /// </summary>
     public void Configure(EntityTypeBuilder<Exercise> b)
     {
         b.ToTable("exercises");
@@ -43,6 +47,10 @@ public sealed class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
 
 public sealed class ExerciseAttemptConfiguration : IEntityTypeConfiguration<ExerciseAttempt>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности ExerciseAttempt с таблицей exercise_attempts.
+    /// Определяет параметры попыток выполнения упражнений, включая связь с упражнением и пользователем.
+    /// </summary>
     public void Configure(EntityTypeBuilder<ExerciseAttempt> b)
     {
         b.ToTable("exercise_attempts");
@@ -63,6 +71,10 @@ public sealed class ExerciseAttemptConfiguration : IEntityTypeConfiguration<Exer
 
 public sealed class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSession>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности ChatSession с таблицей chat_sessions.
+    /// Определяет параметры чат-сессий с ИИ, включая режим, уровень и системный промпт.
+    /// </summary>
     public void Configure(EntityTypeBuilder<ChatSession> b)
     {
         b.ToTable("chat_sessions");
@@ -84,6 +96,10 @@ public sealed class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSess
 
 public sealed class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности ChatMessage с таблицей chat_messages.
+    /// Определяет параметры сообщений чата, включая содержимое, аудио и ссылки на контекст RAG.
+    /// </summary>
     public void Configure(EntityTypeBuilder<ChatMessage> b)
     {
         b.ToTable("chat_messages");
@@ -103,6 +119,10 @@ public sealed class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMess
 
 public sealed class MediaAssetConfiguration : IEntityTypeConfiguration<MediaAsset>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности MediaAsset с таблицей media_assets.
+    /// Определяет параметры медиа-файлов, включая путь хранения, тип содержимого и срок действия.
+    /// </summary>
     public void Configure(EntityTypeBuilder<MediaAsset> b)
     {
         b.ToTable("media_assets");
@@ -123,6 +143,10 @@ public sealed class MediaAssetConfiguration : IEntityTypeConfiguration<MediaAsse
 
 public sealed class PronunciationAttemptConfiguration : IEntityTypeConfiguration<PronunciationAttempt>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности PronunciationAttempt с таблицей pronunciation_attempts.
+    /// Определяет параметры попыток произношения, включая распознанный текст и связь с медиа-файлами.
+    /// </summary>
     public void Configure(EntityTypeBuilder<PronunciationAttempt> b)
     {
         b.ToTable("pronunciation_attempts");
@@ -146,6 +170,10 @@ public sealed class PronunciationAttemptConfiguration : IEntityTypeConfiguration
 
 public sealed class AiCallLogConfiguration : IEntityTypeConfiguration<AiCallLog>
 {
+    /// <summary>
+    /// Настраивает сопоставление сущности AiCallLog с таблицей ai_call_logs.
+    /// Определяет параметры журнала вызовов ИИ, включая провайдера, модель и оценку стоимости.
+    /// </summary>
     public void Configure(EntityTypeBuilder<AiCallLog> b)
     {
         b.ToTable("ai_call_logs");

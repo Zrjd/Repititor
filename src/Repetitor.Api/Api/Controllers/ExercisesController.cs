@@ -22,6 +22,11 @@ public sealed class ExercisesController(
     IProgressService progress,
     IEmbeddingService embeddings) : ControllerBase
 {
+    /// <summary>
+    /// Возвращает список упражнений с фильтрацией и пагинацией.
+    /// Позволяет фильтровать по типу, курсу, уроку, а также показывать только свои или только опубликованные упражнения.
+    /// Для каждого упражнения включает статистику попыток текущего пользователя (количество и лучший результат).
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResponse<ExerciseSummaryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResponse<ExerciseSummaryResponse>>> List(
@@ -92,6 +97,11 @@ public sealed class ExercisesController(
         return Ok(new PagedResponse<ExerciseSummaryResponse>(items, page, request.PageSize, total));
     }
 
+    /// <summary>
+    /// Возвращает полную информацию об упражнении по его идентификатору.
+    /// По умолчанию скрывает правильные ответы (includeAnswers = false), чтобы пользователь мог сначала выполнить упражнение.
+    /// Также включает статистику попыток текущего пользователя по этому упражнению.
+    /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(ExerciseResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -114,6 +124,11 @@ public sealed class ExercisesController(
         return Ok(ToResponse(exercise, includeAnswers, stats?.Count ?? 0, stats?.Best));
     }
 
+    /// <summary>
+    /// Генерирует новое упражнение с помощью ИИ на основе заданных параметров.
+    /// Можно указать контекст: конкретные слова, курс, урок или включить векторный контекст для автоматического подбора.
+    /// Сгенерированное упражнение сохраняется в базу данных и возвращается с правильными ответами.
+    /// </summary>
     [HttpPost("generate")]
     [ProducesResponseType(typeof(ExerciseResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -156,6 +171,11 @@ public sealed class ExercisesController(
         return StatusCode(StatusCodes.Status201Created, ToResponse(exercise, true, 0, null));
     }
 
+    /// <summary>
+    /// Обновляет существующее упражнение.
+    /// Изменить упражнение может только его автор или пользователь с правами администратора/учителя.
+    /// Обновляются только те поля, которые переданы в запросе (остальные остаются без изменений).
+    /// </summary>
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(ExerciseResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ExerciseResponse>> Update(Guid id, UpdateExerciseRequest request, CancellationToken ct)
@@ -193,6 +213,11 @@ public sealed class ExercisesController(
         return Ok(ToResponse(exercise, true, 0, null));
     }
 
+    /// <summary>
+    /// Удаляет (деактивирует) упражнение.
+    /// Удаление мягкое — упражнение помечается как неактивное и исчезает из списков, но данные в базе сохраняются.
+    /// Удалить может только автор упражнения; чужие упражнения удалять запрещено.
+    /// </summary>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
@@ -215,6 +240,11 @@ public sealed class ExercisesController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Принимает ответы пользователя на упражнение, проверяет их и сохраняет результат попытки.
+    /// Система оценивает правильность ответов, вычисляет процент успеха и начисляет XP.
+    /// Также обновляет статистику использования упражнения (количество попыток, процент правильных ответов).
+    /// </summary>
     [HttpPost("{id}/attempts")]
     [ProducesResponseType(typeof(ExerciseAttemptResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -276,6 +306,11 @@ public sealed class ExercisesController(
             attempt.DurationMs, attempt.CompletedAt));
     }
 
+    /// <summary>
+    /// Возвращает историю попыток текущего пользователя по конкретному упражнению.
+    /// Показывает прошлые результаты в обратном хронологическом порядке, чтобы пользователь мог отследить свой прогресс.
+    /// Количество записей можно ограничить параметром limit.
+    /// </summary>
     [HttpGet("{id}/attempts")]
     [ProducesResponseType(typeof(ExerciseAttemptResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ExerciseAttemptResponse[]>> Attempts(Guid id, [FromQuery] int limit = 20, CancellationToken ct = default)
@@ -294,6 +329,11 @@ public sealed class ExercisesController(
             a.AiFeedbackMarkdown, null, a.DurationMs, a.CompletedAt)).ToArray());
     }
 
+    /// <summary>
+    /// Возвращает общую историю всех попыток текущего пользователя по всем упражнениям.
+    /// Используется для страницы "Моя активность" или "История" в профиле пользователя.
+    /// Записи сортируются по дате выполнения (новые сверху), количество ограничено параметром limit.
+    /// </summary>
     [HttpGet("history")]
     [ProducesResponseType(typeof(ExerciseAttemptResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ExerciseAttemptResponse[]>> History([FromQuery] int limit = 50, CancellationToken ct = default)
@@ -312,6 +352,11 @@ public sealed class ExercisesController(
             a.AiFeedbackMarkdown, null, a.DurationMs, a.CompletedAt)).ToArray());
     }
 
+    /// <summary>
+    /// Возвращает список рекомендованных упражнений для текущего пользователя.
+    /// Рекомендации учитывают уровень владения пользователя и его прошлые результаты.
+    /// Приоритет отдаётся упражнениям, которые пользователь ещё не пробовал или где результат был ниже 90%.
+    /// </summary>
     [HttpGet("recommended")]
     [ProducesResponseType(typeof(ExerciseSummaryResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<ExerciseSummaryResponse[]>> Recommended([FromQuery] int limit = 5, CancellationToken ct = default)

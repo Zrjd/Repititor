@@ -27,8 +27,20 @@ public enum AiFinishReason
 
 public sealed record AiChatMessage(string Role, string Content, string? Name = null)
 {
+    /// <summary>
+    /// Создаёт системное сообщение для диалога с AI.
+    /// Системные сообщения задают контекст и поведение модели.
+    /// </summary>
     public static AiChatMessage System(string content) => new("system", content);
+    /// <summary>
+    /// Создаёт сообщение пользователя для диалога с AI.
+    /// Содержит запрос или данные, которые пользователь отправляет модели.
+    /// </summary>
     public static AiChatMessage User(string content) => new("user", content);
+    /// <summary>
+    /// Создаёт сообщение ассистента (ответа модели) для диалога с AI.
+    /// Используется для хранения истории ответов модели в контексте диалога.
+    /// </summary>
     public static AiChatMessage Assistant(string content) => new("assistant", content);
 }
 
@@ -127,39 +139,107 @@ public sealed record AiProviderDescriptor
 
 public interface IChatCompletionClient
 {
+    /// <summary>
+    /// Возвращает имя провайдера AI.
+    /// </summary>
     string Name { get; }
+
+    /// <summary>
+    /// Возвращает тип провайдера AI.
+    /// </summary>
     AiProviderKind Kind { get; }
+
+    /// <summary>
+    /// Возвращает модель чата по умолчанию.
+    /// </summary>
     string ChatModel { get; }
+
+    /// <summary>
+    /// Указывает, поддерживается ли режим JSON-ответа.
+    /// </summary>
     bool SupportsJsonMode { get; }
+
+    /// <summary>
+    /// Отправляет запрос к модели чата и возвращает полный ответ.
+    /// </summary>
     Task<AiChatResult> CompleteAsync(AiChatRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Отправляет запрос к модели чата и возвращает поток токенов ответа.
+    /// </summary>
     IAsyncEnumerable<string> StreamAsync(AiChatRequest request, CancellationToken ct = default);
 }
 
 public interface IEmbeddingClient
 {
+    /// <summary>
+    /// Возвращает имя провайдера AI.
+    /// </summary>
     string Name { get; }
+
+    /// <summary>
+    /// Возвращает тип провайдера AI.
+    /// </summary>
     AiProviderKind Kind { get; }
+
+    /// <summary>
+    /// Возвращает модель для создания эмбеддингов.
+    /// </summary>
     string EmbeddingModel { get; }
+
+    /// <summary>
+    /// Возвращает размерность векторов эмбеддингов.
+    /// </summary>
     int Dimensions { get; }
+
+    /// <summary>
+    /// Создаёт эмбеддинги для списка текстов.
+    /// </summary>
     Task<AiEmbeddingResult> EmbedAsync(AiEmbeddingRequest request, CancellationToken ct = default);
 }
 
 public interface ISpeechSynthesisClient
 {
+    /// <summary>
+    /// Возвращает имя провайдера AI.
+    /// </summary>
     string Name { get; }
+
+    /// <summary>
+    /// Возвращает модель синтеза речи или null.
+    /// </summary>
     string? SynthesisModel { get; }
+
+    /// <summary>
+    /// Преобразует текст в речь (синтез речи).
+    /// </summary>
     Task<AiSpeechResult> SynthesizeAsync(AiSpeechRequest request, CancellationToken ct = default);
 }
 
 public interface ISpeechRecognitionClient
 {
+    /// <summary>
+    /// Возвращает имя провайдера AI.
+    /// </summary>
     string Name { get; }
+
+    /// <summary>
+    /// Возвращает модель распознавания речи или null.
+    /// </summary>
     string? RecognitionModel { get; }
+
+    /// <summary>
+    /// Преобразует аудио в текст (распознавание речи).
+    /// </summary>
     Task<AiTranscriptionResult> TranscribeAsync(AiTranscriptionRequest request, CancellationToken ct = default);
 }
 
 public sealed class AiProviderException : Exception
 {
+    /// <summary>
+    /// Создаёт исключение с информацией об ошибке AI-провайдера.
+    /// Содержит имя провайдера, HTTP-статус и сообщение об ошибке для диагностики.
+    /// </summary>
     public AiProviderException(string provider, HttpStatusCode? status, string message, Exception? inner = null)
         : base(message, inner)
     {
@@ -169,7 +249,15 @@ public sealed class AiProviderException : Exception
 
     public string Provider { get; }
     public HttpStatusCode? StatusCode { get; }
+    /// <summary>
+    /// Указывает, что ошибка вызвана превышением лимита запросов (HTTP 429).
+    /// Позволяет вызывающему коду применить стратегию повторных попыток с задержкой.
+    /// </summary>
     public bool IsRateLimited => StatusCode == HttpStatusCode.TooManyRequests;
+    /// <summary>
+    /// Указывает, что ошибка временная и запрос можно повторить.
+    /// Включает таймауты, недоступность сервиса и отсутствие статуса ошибки.
+    /// </summary>
     public bool IsTransient => StatusCode is null or HttpStatusCode.RequestTimeout or HttpStatusCode.BadGateway
         or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;
 }

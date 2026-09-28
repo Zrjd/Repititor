@@ -5,12 +5,20 @@ namespace Repetitor.Api.Infrastructure.Persistence;
 
 public sealed class SchemaPatches
 {
+    /// <summary>
+    /// Имя таблицы, в которой хранятся идентификаторы уже применённых патчей схемы.
+    /// Нужна для отслеживания того, какие SQL-патчи уже были выполнены, чтобы не применять их повторно.
+    /// </summary>
     public const string PatchTable = "schema_patches";
 
     private readonly AppDbContext _db;
     private readonly AiOptions _ai;
     private readonly ILogger<SchemaPatches> _logger;
 
+    /// <summary>
+    /// Создаёт экземпляр службы патчей схемы БД.
+    /// Принимает контекст БД для выполнения SQL, настройки AI (для определения размерности векторов) и логгер.
+    /// </summary>
     public SchemaPatches(AppDbContext db, Microsoft.Extensions.Options.IOptions<AiOptions> ai, ILogger<SchemaPatches> logger)
     {
         _db = db;
@@ -18,6 +26,11 @@ public sealed class SchemaPatches
         _logger = logger;
     }
 
+    /// <summary>
+    /// Применяет все необходимые патчи схемы базы данных.
+    /// Сначала создаёт таблицу учёта патчей, затем последовательно применяет патчи для pgvector, триграмминдексов и представления статистики.
+    /// Каждый патч применяется только один раз — повторный запуск пропускает уже применённые патчи.
+    /// </summary>
     public async Task ApplyAsync(CancellationToken ct = default)
     {
         await EnsurePatchTableAsync(ct);

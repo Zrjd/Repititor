@@ -310,6 +310,7 @@ export interface AiSettings {
   defaultChatModel: string
   temperature: number
   maxOutputTokens: number
+  lessonPrompt: string
   providers: AiProviderSettings[]
 }
 

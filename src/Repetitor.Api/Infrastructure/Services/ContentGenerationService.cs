@@ -29,6 +29,9 @@ public sealed record CourseContentGeneration(
 
 public interface IContentGenerationService
 {
+    /// <summary>
+    /// Генерирует содержимое урока с помощью ИИ.
+    /// </summary>
     Task<LessonContentGeneration> GenerateLessonAsync(
         Guid courseId,
         string? topic,
@@ -41,6 +44,9 @@ public interface IContentGenerationService
         string? summary = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Генерирует структуру курса с помощью ИИ.
+    /// </summary>
     Task<CourseContentGeneration> GenerateCourseAsync(
         Guid languageId,
         string? topic,
@@ -58,6 +64,10 @@ public sealed class ContentGenerationService(
 {
     private readonly AiOptions _options = aiOptions.Value;
 
+    /// <summary>
+    /// Создаёт полное содержимое урока: заголовок, краткое описание, текст и ключевую лексику.
+    /// Учитывает язык и уровень курса, а также пожелания по теме и длительности.
+    /// </summary>
     public async Task<LessonContentGeneration> GenerateLessonAsync(
         Guid courseId,
         string? topic,
@@ -126,6 +136,10 @@ public sealed class ContentGenerationService(
             0, 0);
     }
 
+    /// <summary>
+    /// Создаёт структуру курса: описание и список заголовков уроков с нарастающей сложностью.
+    /// Заголовки уроков формируются на изучаемом языке, описание — на языке интерфейса.
+    /// </summary>
     public async Task<CourseContentGeneration> GenerateCourseAsync(
         Guid languageId,
         string? topic,

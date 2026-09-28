@@ -15,6 +15,11 @@ public sealed class DatabaseInitializer(
     IConfiguration configuration,
     ILogger<DatabaseInitializer> logger)
 {
+    /// <summary>
+    /// Выполняет полную инициализацию базы данных при запуске приложения.
+    /// Применяет миграции, патчи схемы и заполняет БД стартовыми данными (языки, курсы, грамматика, словарь, упражнения, администратор).
+    /// Идемпотентна: при повторном запуске существующие данные не дублируются.
+    /// </summary>
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         await using (var db = await dbFactory.CreateDbContextAsync(ct))

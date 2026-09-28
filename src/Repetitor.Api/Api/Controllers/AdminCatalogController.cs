@@ -27,6 +27,11 @@ public sealed class AdminCatalogController(
 {
     private const string AiSettingsKey = "ai.settings";
 
+    /// <summary>
+    /// Возвращает список всех курсов для панели управления, включая неопубликованные.
+    /// Поддерживает фильтрацию по языку и возможность скрыть неопубликованные курсы.
+    /// Включает количество уроков и дату создания для каждого курса.
+    /// </summary>
     [HttpGet("courses")]
     [ProducesResponseType(typeof(AdminCourseResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminCourseResponse[]>> Courses(
@@ -56,6 +61,11 @@ public sealed class AdminCatalogController(
             c.Lessons.Count, c.CreatedAt)).ToArray());
     }
 
+    /// <summary>
+    /// Создаёт новый курс в каталоге.
+    /// Проверяет существование указанного языка перед созданием.
+    /// Возвращает 201 с данными созданного курса и ссылкой на получение его деталей.
+    /// </summary>
     [HttpPost("courses")]
     [ProducesResponseType(typeof(AdminCourseResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<AdminCourseResponse>> CreateCourse(CreateCourseRequest request, CancellationToken ct)
@@ -86,6 +96,10 @@ public sealed class AdminCatalogController(
         return CreatedAtAction(nameof(GetCourse), new { id = course.Id }, ToResponse(course));
     }
 
+    /// <summary>
+    /// Получает детальную информацию о курсе по идентификатору для редактирования в панели управления.
+    /// Возвращает 404, если курс не найден.
+    /// </summary>
     [HttpGet("courses/{id}")]
     [ProducesResponseType(typeof(AdminCourseResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminCourseResponse>> GetCourse(Guid id, CancellationToken ct)
@@ -95,6 +109,11 @@ public sealed class AdminCatalogController(
         return course is null ? NotFound() : Ok(ToResponse(course));
     }
 
+    /// <summary>
+    /// Обновляет параметры существующего курса.
+    /// Поддерживает частичное обновление — изменяются только переданные поля.
+    /// При смене языка проверяет его существование. Возвращает 404, если курс не найден.
+    /// </summary>
     [HttpPut("courses/{id}")]
     [ProducesResponseType(typeof(AdminCourseResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminCourseResponse>> UpdateCourse(Guid id, UpdateCourseRequest request, CancellationToken ct)
@@ -128,6 +147,10 @@ public sealed class AdminCatalogController(
         return Ok(ToResponse(course));
     }
 
+    /// <summary>
+    /// Удаляет курс из каталога вместе со связанными данными.
+    /// Операция необратима. Возвращает 404, если курс не найден.
+    /// </summary>
     [HttpDelete("courses/{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteCourse(Guid id, CancellationToken ct)
@@ -144,6 +167,10 @@ public sealed class AdminCatalogController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Возвращает список всех уроков указанного курса для управления содержимым.
+    /// Уроки сортируются по порядковому номеру. Включает полные данные каждого урока.
+    /// </summary>
     [HttpGet("courses/{id}/lessons")]
     [ProducesResponseType(typeof(AdminLessonResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminLessonResponse[]>> Lessons(Guid id, CancellationToken ct)
@@ -157,6 +184,11 @@ public sealed class AdminCatalogController(
         return Ok(lessons.Select(ToResponse).ToArray());
     }
 
+    /// <summary>
+    /// Создаёт новый урок в указанном курсе.
+    /// Проверяет существование курса перед созданием.
+    /// Возвращает 201 с данными созданного урока и ссылкой на получение его деталей.
+    /// </summary>
     [HttpPost("lessons")]
     [ProducesResponseType(typeof(AdminLessonResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<AdminLessonResponse>> CreateLesson(CreateLessonRequest request, CancellationToken ct)
@@ -187,6 +219,10 @@ public sealed class AdminCatalogController(
         return CreatedAtAction(nameof(GetLesson), new { id = lesson.Id }, ToResponse(lesson));
     }
 
+    /// <summary>
+    /// Получает детальную информацию об уроке по идентификатору для редактирования.
+    /// Возвращает 404, если урок не найден.
+    /// </summary>
     [HttpGet("lessons/{id}")]
     [ProducesResponseType(typeof(AdminLessonResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminLessonResponse>> GetLesson(Guid id, CancellationToken ct)
@@ -196,6 +232,11 @@ public sealed class AdminCatalogController(
         return lesson is null ? NotFound() : Ok(ToResponse(lesson));
     }
 
+    /// <summary>
+    /// Обновляет параметры существующего урока.
+    /// Поддерживает частичное обновление — изменяются только переданные поля.
+    /// Возвращает 404, если урок не найден.
+    /// </summary>
     [HttpPut("lessons/{id}")]
     [ProducesResponseType(typeof(AdminLessonResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminLessonResponse>> UpdateLesson(Guid id, UpdateLessonRequest request, CancellationToken ct)
@@ -221,6 +262,10 @@ public sealed class AdminCatalogController(
         return Ok(ToResponse(lesson));
     }
 
+    /// <summary>
+    /// Удаляет урок из курса.
+    /// Операция необратима. Возвращает 404, если урок не найден.
+    /// </summary>
     [HttpDelete("lessons/{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteLesson(Guid id, CancellationToken ct)
@@ -237,6 +282,11 @@ public sealed class AdminCatalogController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Генерирует содержимое урока с помощью ИИ на основе указанной темы, уровня и требований.
+    /// Использует текущие настройки промпта из конфигурации системы.
+    /// Возвращает заголовок, краткое описание, Markdown-контент и ключевую лексику.
+    /// </summary>
     [HttpPost("lessons/{id}/generate")]
     [ProducesResponseType(typeof(GenerateLessonContentResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<GenerateLessonContentResponse>> GenerateLesson(
@@ -254,6 +304,11 @@ public sealed class AdminCatalogController(
             result.Provider, result.Model, result.InputTokens, result.OutputTokens));
     }
 
+    /// <summary>
+    /// Генерирует структуру курса с помощью ИИ: описание и список заголовков уроков на основе темы и уровня.
+    /// Позволяет быстро создать каркас курса, который затем можно доработать вручную.
+    /// Возвращает 404, если курс не найден.
+    /// </summary>
     [HttpPost("courses/{id}/generate")]
     [ProducesResponseType(typeof(GenerateCourseContentResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<GenerateCourseContentResponse>> GenerateCourse(
@@ -273,6 +328,10 @@ public sealed class AdminCatalogController(
             result.Description, result.LessonTitles, result.Provider, result.Model, result.InputTokens, result.OutputTokens));
     }
 
+    /// <summary>
+    /// Возвращает текущие настройки ИИ: провайдеры, модели, температуру, лимиты токенов и промпт для уроков.
+    /// Объединяет значения из конфигурации приложения с переопределениями из базы данных.
+    /// </summary>
     [HttpGet("ai-settings")]
     [ProducesResponseType(typeof(AiSettingsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiSettingsResponse>> GetAiSettings(CancellationToken ct)
@@ -281,6 +340,11 @@ public sealed class AdminCatalogController(
         return Ok(await BuildAiSettingsResponse(db, ct));
     }
 
+    /// <summary>
+    /// Обновляет настройки ИИ, сохраняя их в базе данных как JSON.
+    /// Поддерживает частичное обновление — изменяются только переданные поля.
+    /// Позволяет настроить провайдеров, модели, температуру, лимиты и промпт для генерации уроков.
+    /// </summary>
     [HttpPut("ai-settings")]
     [ProducesResponseType(typeof(AiSettingsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiSettingsResponse>> UpdateAiSettings(UpdateAiSettingsRequest request, CancellationToken ct)
@@ -332,6 +396,11 @@ public sealed class AdminCatalogController(
         return Ok(await BuildAiSettingsResponse(db, ct));
     }
 
+    /// <summary>
+    /// Проверяет подключение к указанному провайдеру ИИ, отправляя тестовый запрос.
+    /// Измеряет задержку ответа и возвращает результат с указанием используемой модели.
+    /// При ошибке возвращает 200 с флагом неуспеха и описанием проблемы.
+    /// </summary>
     [HttpPost("ai-settings/test")]
     [ProducesResponseType(typeof(AiTestResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AiTestResponse>> TestAiConnection(

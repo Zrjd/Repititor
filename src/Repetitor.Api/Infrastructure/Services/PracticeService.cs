@@ -47,9 +47,21 @@ public sealed record SessionSummary(
 
 public interface IPracticeService
 {
+    /// <summary>
+    /// Возвращает карточки, у которых наступил срок повторения.
+    /// </summary>
     Task<IReadOnlyList<DueCard>> GetDueCardsAsync(Guid userId, Guid? deckId, int limit, CancellationToken ct = default);
+    /// <summary>
+    /// Сохраняет результаты повторения карточек и пересчитывает их расписание.
+    /// </summary>
     Task<IReadOnlyList<ReviewResult>> SubmitReviewsAsync(Guid userId, IReadOnlyList<ReviewSubmission> submissions, CancellationToken ct = default);
+    /// <summary>
+    /// Формирует сводку по завершённой сессии повторения.
+    /// </summary>
     Task<SessionSummary> BuildSummaryAsync(Guid userId, Guid? deckId, int reviewed, int correct, int again, int newSeen, int xp, CancellationToken ct = default);
+    /// <summary>
+    /// Подсчитывает количество карточек, готовых к повторению.
+    /// </summary>
     Task<int> CountDueAsync(Guid userId, Guid? deckId, CancellationToken ct = default);
 }
 
@@ -61,6 +73,11 @@ public sealed class PracticeService(
 {
     private const int XpPerReview = 2;
 
+    /// <summary>
+    /// Возвращает карточки ученика, у которых наступил срок повторения.
+    /// Можно ограничить выборку конкретной колодой и максимальным числом карточек.
+    /// Карточки сортируются по состоянию и дате следующего повторения.
+    /// </summary>
     public async Task<IReadOnlyList<DueCard>> GetDueCardsAsync(Guid userId, Guid? deckId, int limit, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -92,6 +109,11 @@ public sealed class PracticeService(
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Принимает и сохраняет результаты повторения карточек.
+    /// Для каждой карточки пересчитывается интервал и состояние по алгоритму SRS, начисляется опыт и пишется журнал.
+    /// Возвращает подробный результат по каждой карточке.
+    /// </summary>
     public async Task<IReadOnlyList<ReviewResult>> SubmitReviewsAsync(
         Guid userId,
         IReadOnlyList<ReviewSubmission> submissions,
@@ -207,6 +229,10 @@ public sealed class PracticeService(
         return results;
     }
 
+    /// <summary>
+    /// Строит сводку по сессии повторения: точность, заработанный опыт и прогноз на 14 дней.
+    /// Используется для отображения статистики ученику после завершения тренировки.
+    /// </summary>
     public async Task<SessionSummary> BuildSummaryAsync(
         Guid userId,
         Guid? deckId,
@@ -246,6 +272,10 @@ public sealed class PracticeService(
             forecast);
     }
 
+    /// <summary>
+    /// Подсчитывает, сколько карточек ученика готовы к повторению прямо сейчас.
+    /// Удобно для отображения счётчика на главном экране без загрузки самих карточек.
+    /// </summary>
     public async Task<int> CountDueAsync(Guid userId, Guid? deckId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

@@ -24,6 +24,12 @@ public sealed class SpeechController(
     IProgressService progress,
     IOptions<MediaOptions> mediaOptions) : ControllerBase
 {
+    /// <summary>
+    /// Синтезирует речь из текста (Text-to-Speech).
+    /// Преобразует переданный текст в аудиофайл с выбранным голосом и скоростью.
+    /// Возвращает URL для воспроизведения и метаданные аудио (тип, размер).
+    /// Используется для озвучки слов и фраз при обучении.
+    /// </summary>
     [HttpPost("synthesize")]
     [ProducesResponseType(typeof(SynthesizeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -41,6 +47,12 @@ public sealed class SpeechController(
         return Ok(new SynthesizeResponse(stored.Url, stored.Id, stored.ContentType, stored.SizeBytes, "tts"));
     }
 
+    /// <summary>
+    /// Распознаёт речь из аудиофайла (Speech-to-Text).
+    /// Принимает аудиозапись, определяет язык и преобразует речь в текст.
+    /// Возвращает полный текст, длительность, сегменты с временными метками
+    /// и уверенностью распознавания. Также сохраняет аудиофайл в хранилище.
+    /// </summary>
     [HttpPost("transcribe")]
     [ProducesResponseType(typeof(TranscriptionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -83,6 +95,13 @@ public sealed class SpeechController(
             stored.Url));
     }
 
+    /// <summary>
+    /// Оценивает произношение пользователя по аудиозаписи.
+    /// Сравнивает распознанную речь с целевым текстом и вычисляет оценки
+    /// по нескольким критериям: точность, беглость, полнота, просодия.
+    /// Сохраняет попытку в базу, начисляет XP и возвращает детальный разбор
+    /// с оценками на уровне отдельных слов и подсказками.
+    /// </summary>
     [HttpPost("pronunciation")]
     [ProducesResponseType(typeof(PronunciationResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -208,6 +227,12 @@ public sealed class SpeechController(
             attempt.CreatedAt));
     }
 
+    /// <summary>
+    /// Возвращает историю попыток оценки произношения текущего пользователя.
+    /// Результат отсортирован по дате (новые сверху), количество ограничивается
+    /// параметром limit (1–200). Используется для просмотра прогресса
+    /// и повторного просмотра результатов предыдущих попыток.
+    /// </summary>
     [HttpGet("pronunciation/attempts")]
     [ProducesResponseType(typeof(PronunciationResponse[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<PronunciationResponse[]>> Attempts([FromQuery] int limit = 50, CancellationToken ct = default)
@@ -226,6 +251,12 @@ public sealed class SpeechController(
             null, a.XpEarned, a.CreatedAt)).ToArray());
     }
 
+    /// <summary>
+    /// Возвращает список аудиозаписей текущего пользователя.
+    /// Включает все загруженные медиафайлы: записи произношения,
+    /// распознавания речи и другие. Для каждой записи возвращается
+    /// метаданные и временный URL для доступа к файлу.
+    /// </summary>
     [HttpGet("recordings")]
     [ProducesResponseType(typeof(object[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<object[]>> Recordings([FromQuery] int limit = 50, CancellationToken ct = default)
@@ -253,6 +284,12 @@ public sealed class SpeechController(
         return Ok(assets.Cast<object>().ToArray());
     }
 
+    /// <summary>
+    /// Удаляет аудиозапись пользователя по идентификатору.
+    /// Файл удаляется из хранилища и запись из базы данных.
+    /// Доступна только владельцу записи — при попытке удалить чужую
+    /// запись возвращается 404 Not Found.
+    /// </summary>
     [HttpDelete("recordings/{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteRecording(Guid id, CancellationToken ct)

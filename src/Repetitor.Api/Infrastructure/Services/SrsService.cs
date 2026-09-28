@@ -31,6 +31,10 @@ public sealed class SrsService : ISrsService
     private const double HardFactor = 1.2;
     private const double LapseMultiplier = 0.4;
 
+    /// <summary>
+    /// Вычисляет следующий интервал повторения карточки на основе оценки пользователя.
+    /// Реализует алгоритм SRS (Spaced Repetition System): правильные ответы увеличивают интервал, ошибки сбрасывают прогресс.
+    /// </summary>
     public ReviewOutcome Schedule(ReviewCard card, ReviewRating rating, IClock clock)
     {
         var now = clock.UtcNow;
@@ -107,6 +111,10 @@ public sealed class SrsService : ISrsService
             masteryDelta);
     }
 
+    /// <summary>
+    /// Строит прогноз количества карточек для повторения на каждый из указанных дней.
+    /// Помогает пользователю планировать нагрузку и показывает, сколько карточек будет запланировано на будущее.
+    /// </summary>
     public IReadOnlyList<DateOnly> Forecast(IEnumerable<ReviewCard> cards, IClock clock, int days)
     {
         var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
@@ -216,6 +224,10 @@ public interface IProgressService
 
 public sealed class ProgressService(IDbContextFactory<AppDbContext> dbFactory, IClock clock) : IProgressService
 {
+    /// <summary>
+    /// Регистрирует учебную активность пользователя: начисляет XP, обновляет статистику дня и серию дней.
+    /// Возвращает текущий прогресс, включая общий XP, серию дней и достижение дневной цели.
+    /// </summary>
     public async Task<XpResult> RegisterActivityAsync(
         Guid userId,
         int xp,

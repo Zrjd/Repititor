@@ -13,12 +13,40 @@ public sealed class OpenAiCompatibleClient(
     AiProviderOptions options,
     AiOptions aiOptions) : IChatCompletionClient, IEmbeddingClient, ISpeechSynthesisClient, ISpeechRecognitionClient
 {
+    /// <summary>
+    /// Возвращает имя провайдера AI (например, "openai" или "ollama").
+    /// Используется для идентификации провайдера в логах и при обработке ошибок.
+    /// </summary>
     public string Name => providerName;
+    /// <summary>
+    /// Возвращает тип провайдера — OpenAiCompatible.
+    /// Нужен для определения, какой формат запросов использовать при работе с API.
+    /// </summary>
     public AiProviderKind Kind => AiProviderKind.OpenAiCompatible;
+    /// <summary>
+    /// Возвращает модель чата по умолчанию для этого провайдера.
+    /// Если в конфигурации не указана модель, используется глобальная модель из настроек AI.
+    /// </summary>
     public string ChatModel => string.IsNullOrWhiteSpace(options.ChatModel) ? aiOptions.DefaultChatModel : options.ChatModel;
+    /// <summary>
+    /// Возвращает модель для создания эмбеддингов (векторных представлений текста).
+    /// Эмбеддинги используются для семантического поиска и сравнения текстов.
+    /// </summary>
     public string EmbeddingModel => options.EmbeddingModel;
+    /// <summary>
+    /// Возвращает модель синтеза речи (TTS) или null, если она не настроена.
+    /// Используется для преобразования текста в аудио.
+    /// </summary>
     public string? SynthesisModel => string.IsNullOrWhiteSpace(options.TtsModel) ? null : options.TtsModel;
+    /// <summary>
+    /// Возвращает модель распознавания речи (STT) или null, если она не настроена.
+    /// Используется для преобразования аудио в текст.
+    /// </summary>
     public string? RecognitionModel => string.IsNullOrWhiteSpace(options.SttModel) ? null : options.SttModel;
+    /// <summary>
+    /// Указывает, поддерживает ли провайдер режим JSON-ответа.
+    /// В этом режиме модель гарантированно возвращает валидный JSON.
+    /// </summary>
     public bool SupportsJsonMode => true;
 
     private int EmbeddingDimensions => providerName.Equals("ollama", StringComparison.OrdinalIgnoreCase)
@@ -29,6 +57,10 @@ public sealed class OpenAiCompatibleClient(
 
     private HttpClient Http { get; } = http;
 
+    /// <summary>
+    /// Отправляет запрос к модели чата и возвращает полный ответ.
+    /// Используется для получения результата одним блоком, когда стриминг не нужен.
+    /// </summary>
     public async Task<AiChatResult> CompleteAsync(AiChatRequest request, CancellationToken ct = default)
     {
         var payload = BuildChatPayload(request, stream: false);
@@ -54,6 +86,10 @@ public sealed class OpenAiCompatibleClient(
         };
     }
 
+    /// <summary>
+    /// Отправляет запрос к модели чата и возвращает ответ в виде потока токенов.
+    /// Позволяет отображать ответ по мере его генерации, улучшая пользовательский опыт.
+    /// </summary>
     public async IAsyncEnumerable<string> StreamAsync(AiChatRequest request, [EnumeratorCancellation] CancellationToken ct = default)
     {
         var payload = BuildChatPayload(request, stream: true);
@@ -108,6 +144,10 @@ public sealed class OpenAiCompatibleClient(
         }
     }
 
+    /// <summary>
+    /// Создаёт эмбеддинги (векторные представления) для списка текстов.
+    /// Векторы используются для семантического поиска и сравнения текстов между собой.
+    /// </summary>
     public async Task<AiEmbeddingResult> EmbedAsync(AiEmbeddingRequest request, CancellationToken ct = default)
     {
         var model = string.IsNullOrWhiteSpace(request.Model) ? EmbeddingModel : request.Model;
@@ -148,6 +188,10 @@ public sealed class OpenAiCompatibleClient(
         };
     }
 
+    /// <summary>
+    /// Преобразует текст в речь (синтез речи) с помощью модели TTS.
+    /// Возвращает аудиоданные в формате, указанном в запросе.
+    /// </summary>
     public async Task<AiSpeechResult> SynthesizeAsync(AiSpeechRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(options.TtsModel))
@@ -176,6 +220,10 @@ public sealed class OpenAiCompatibleClient(
         };
     }
 
+    /// <summary>
+    /// Преобразует аудио в текст (распознавание речи) с помощью модели STT.
+    /// Возвращает полный текст, длительность и сегменты с временными метками.
+    /// </summary>
     public async Task<AiTranscriptionResult> TranscribeAsync(AiTranscriptionRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(options.SttModel))
