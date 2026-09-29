@@ -94,6 +94,13 @@ export Media__RootPath=/var/lib/repetitor/media
 
 Также поддерживается префикс `REPETITOR_` (например, `REPETITOR_Jwt__SigningKey`).
 
+Фоновую генерацию уроков можно отключить на конкретном инстансе, например если генерацию
+выполняет отдельный процесс API:
+
+```bash
+export Generation__WorkerEnabled=false
+```
+
 Systemd-пример (`/etc/systemd/system/repetitor-api.service`):
 
 ```ini

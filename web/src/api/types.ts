@@ -337,6 +337,17 @@ export interface LearnerGroup {
   courses: StudyGroupCourse[]
 }
 
+export type LessonGenerationStatus = 'None' | 'Queued' | 'Running' | 'Completed' | 'Failed'
+
+export interface LessonGenerationState {
+  lessonId: string
+  status: LessonGenerationStatus
+  requestedAt?: string | null
+  completedAt?: string | null
+  error?: string | null
+  isActive: boolean
+}
+
 export interface AdminLesson {
   id: string
   courseId: string
@@ -349,6 +360,11 @@ export interface AdminLesson {
   isPublished: boolean
   grammarTopicId?: string | null
   keyVocabulary?: string[] | null
+  aiGenerationStatus: LessonGenerationStatus
+  aiGenerationRequestedAt?: string | null
+  aiGenerationCompletedAt?: string | null
+  aiGenerationError?: string | null
+  isAvailableToStudents: boolean
 }
 
 export interface AiProviderSettings {

@@ -1164,6 +1164,53 @@ a:hover {
   flex-shrink: 0;
 }
 
+.admin-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.admin-row__error {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.badge--progress {
+  background: rgba(56, 132, 255, 0.14);
+  color: #1f5fd0;
+}
+
+.badge--success {
+  background: rgba(46, 160, 67, 0.14);
+  color: #1f7a35;
+}
+
+.badge--danger {
+  background: rgba(214, 69, 69, 0.14);
+  color: #b03636;
+}
+
+.badge--muted {
+  background: rgba(128, 128, 128, 0.16);
+  color: #6b6b6b;
+}
+
+.badge--draft {
+  background: rgba(214, 158, 46, 0.16);
+  color: #9a6b12;
+}
+
 .admin-row--button {
   width: 100%;
   text-align: left;

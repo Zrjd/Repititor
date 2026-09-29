@@ -51,6 +51,26 @@ public sealed class AiProviderOptions
     public double OutputCostPerMillionTokens { get; set; }
 }
 
+/// <summary>
+/// Настройки фоновой генерации содержимого уроков.
+/// </summary>
+public sealed class GenerationOptions
+{
+    public const string SectionName = "Generation";
+
+    /// <summary>Включает ли воркер, который выполняет поставленные в очередь задания.</summary>
+    public bool WorkerEnabled { get; set; } = true;
+
+    /// <summary>Как часто воркер ищет новые задания, секунды.</summary>
+    public int PollSeconds { get; set; } = 5;
+
+    /// <summary>Через сколько минут задание в статусе Running считается зависшим и возвращается в очередь.</summary>
+    public int StaleAfterMinutes { get; set; } = 30;
+
+    /// <summary>Максимальная длина текста ошибки, сохраняемой в уроке.</summary>
+    public int MaxErrorLength { get; set; } = 500;
+}
+
 public sealed class MediaOptions
 {
     public const string SectionName = "Media";

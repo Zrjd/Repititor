@@ -168,9 +168,20 @@ public sealed record AdminLessonItem(
     int EstimatedMinutes,
     bool IsPublished,
     Guid? GrammarTopicId,
-    string[]? KeyVocabulary);
+    string[]? KeyVocabulary,
+    LessonGenerationStatus AiGenerationStatus,
+    DateTimeOffset? AiGenerationRequestedAt,
+    DateTimeOffset? AiGenerationCompletedAt,
+    string? AiGenerationError,
+    bool IsAvailableToStudents);
 
 /// <summary>Частичное обновление курса: null означает «поле не передано, оставить как есть».</summary>
+public static class LessonAvailability
+{
+    /// <summary>Урок доступен студентам, только если опубликованы и урок, и курс.</summary>
+    public static bool IsAvailableToStudents(bool lessonPublished, bool coursePublished) => lessonPublished && coursePublished;
+}
+
 public sealed record CourseUpdate(
     string? Slug,
     string? Title,

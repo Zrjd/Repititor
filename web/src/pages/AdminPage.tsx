@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n } from '../i18n'
 import { useAuth } from '../auth/AuthContext'
 import { adminApi, catalogApi } from '../api/endpoints'
+import { ApiError } from '../api/client'
 import type { AdminCourse, AdminLesson, CefrLevel } from '../api/types'
 import { ErrorState, Spinner } from '../components/Feedback'
 import { PageHeader } from '../components/PageHeader'
@@ -249,12 +250,21 @@ function LessonsTab() {
   const [editing, setEditing] = useState<AdminLesson | null>(null)
   const [creating, setCreating] = useState(false)
   const [selectedCourseId, setSelectedCourseId] = useState<string>('')
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null)
+  const [generateTopic, setGenerateTopic] = useState('')
+  const [generateDuration, setGenerateDuration] = useState<number | undefined>(undefined)
+  const [generateSummary, setGenerateSummary] = useState('')
 
   const courses = useQuery({ queryKey: ['admin-courses'], queryFn: () => adminApi.courses() })
   const lessons = useQuery({
     queryKey: ['admin-lessons', selectedCourseId],
     queryFn: () => adminApi.lessons(selectedCourseId),
     enabled: !!selectedCourseId,
+    // Пока идёт хотя бы одна генерация, список обновляется сам.
+    refetchInterval: (query) => {
+      const data = query.state.data as AdminLesson[] | undefined
+      return data?.some((lesson) => isGenerationActive(lesson)) ? 2000 : false
+    },
   })
 
   const createMutation = useMutation({
@@ -277,6 +287,29 @@ function LessonsTab() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminApi.deleteLesson(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-lessons'] }),
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: (id: string) => adminApi.generateLesson(id, {
+      topic: generateTopic || undefined,
+      durationMinutes: generateDuration,
+      summary: generateSummary || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-lessons'] })
+      setGeneratingFor(null)
+      setGenerateTopic('')
+      setGenerateSummary('')
+      setGenerateDuration(undefined)
+    },
+    onError: (error) => {
+      // 409: генерация уже идёт — это не ошибка, просто показываем актуальный статус.
+      if (!(error instanceof ApiError) || error.status !== 409) {
+        console.error(error)
+      }
+      qc.invalidateQueries({ queryKey: ['admin-lessons'] })
+      setGeneratingFor(null)
+    },
   })
 
   if (courses.isPending) return <Spinner />
@@ -336,10 +369,28 @@ function LessonsTab() {
               <strong>{lesson.title}</strong>
               <span className="muted">
                 {lesson.sortOrder} · {lesson.estimatedMinutes} {t('common.minutes')}
-                {lesson.isPublished ? '' : ` · ${t('admin.lessonPublished')}: ✗`}
               </span>
+              <div className="admin-badges">
+                <GenerationBadge lesson={lesson} />
+                {!lesson.isPublished ? (
+                  <span className="badge badge--muted">{t('admin.lessonUnpublished')}</span>
+                ) : !lesson.isAvailableToStudents ? (
+                  <span className="badge badge--draft">{t('admin.lessonDraft')}</span>
+                ) : null}
+              </div>
+              {lesson.aiGenerationStatus === 'Failed' && lesson.aiGenerationError ? (
+                <span className="muted admin-row__error">{lesson.aiGenerationError}</span>
+              ) : null}
             </div>
             <div className="admin-row__actions">
+              <button
+                type="button"
+                className="button button--accent"
+                disabled={isGenerationActive(lesson)}
+                onClick={() => setGeneratingFor(generatingFor === lesson.id ? null : lesson.id)}
+              >
+                {isGenerationActive(lesson) ? t('admin.generationInProgress') : t('admin.generateWithAi')}
+              </button>
               <button type="button" className="button button--ghost" onClick={() => setEditing(lesson)}>
                 {t('admin.editLesson')}
               </button>
@@ -355,11 +406,70 @@ function LessonsTab() {
                 {t('admin.deleteLesson')}
               </button>
             </div>
+            {generatingFor === lesson.id ? (
+              <div className="admin-form__ai">
+                <label>
+                  {t('admin.generateLessonTitle')}
+                  <input
+                    value={generateTopic}
+                    onChange={(e) => setGenerateTopic(e.target.value)}
+                    placeholder={t('admin.generateLessonHint')}
+                  />
+                </label>
+                <label>
+                  {t('admin.generateLessonDuration')}
+                  <input
+                    type="number"
+                    min={5}
+                    max={180}
+                    value={generateDuration ?? ''}
+                    onChange={(e) => setGenerateDuration(e.target.value ? Number(e.target.value) : undefined)}
+                    placeholder={t('admin.generateLessonDurationHint')}
+                  />
+                </label>
+                <label>
+                  {t('admin.generateLessonSummary')}
+                  <input
+                    value={generateSummary}
+                    onChange={(e) => setGenerateSummary(e.target.value)}
+                    placeholder={t('admin.generateLessonSummaryHint')}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button button--primary"
+                  disabled={generateMutation.isPending}
+                  onClick={() => generateMutation.mutate(lesson.id)}
+                >
+                  {generateMutation.isPending ? t('admin.generating') : t('admin.generationEnqueue')}
+                </button>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
     </div>
   )
+}
+
+function isGenerationActive(lesson: AdminLesson) {
+  return lesson.aiGenerationStatus === 'Queued' || lesson.aiGenerationStatus === 'Running'
+}
+
+function GenerationBadge({ lesson }: { lesson: AdminLesson }) {
+  const { t } = useI18n()
+
+  switch (lesson.aiGenerationStatus) {
+    case 'Queued':
+    case 'Running':
+      return <span className="badge badge--progress">{t('admin.generationInProgress')}</span>
+    case 'Completed':
+      return <span className="badge badge--success">{t('admin.generationCompleted')}</span>
+    case 'Failed':
+      return <span className="badge badge--danger">{t('admin.generationFailed')}</span>
+    default:
+      return null
+  }
 }
 
 function LessonForm({
@@ -384,25 +494,6 @@ function LessonForm({
   const [isPublished, setIsPublished] = useState(lesson?.isPublished ?? true)
   const [sortOrder, setSortOrder] = useState(lesson?.sortOrder ?? 0)
   const [keyVocabulary, setKeyVocabulary] = useState((lesson?.keyVocabulary ?? []).join(', '))
-  const [generating, setGenerating] = useState(false)
-  const [generateTopic, setGenerateTopic] = useState('')
-  const [generateDuration, setGenerateDuration] = useState<number | undefined>(undefined)
-  const [generateSummary, setGenerateSummary] = useState('')
-
-  const generateMutation = useMutation({
-    mutationFn: () => adminApi.generateLesson(lesson?.id ?? courseId!, {
-      topic: generateTopic || undefined,
-      durationMinutes: generateDuration,
-      summary: generateSummary || undefined,
-    }),
-    onSuccess: (result) => {
-      setTitle(result.title)
-      setSummary(result.summary ?? '')
-      setContentMarkdown(result.contentMarkdown)
-      setKeyVocabulary(result.keyVocabulary.join(', '))
-      setGenerating(false)
-    },
-  })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -425,47 +516,6 @@ function LessonForm({
   return (
     <form className="card admin-form" onSubmit={handleSubmit}>
       <h3>{lesson ? t('admin.editLesson') : t('admin.createLesson')}</h3>
-
-      <div className="admin-form__ai">
-        <label>
-          {t('admin.generateLessonTitle')}
-          <input
-            value={generateTopic}
-            onChange={(e) => setGenerateTopic(e.target.value)}
-            placeholder={t('admin.generateLessonHint')}
-          />
-        </label>
-        <label>
-          {t('admin.generateLessonDuration')}
-          <input
-            type="number"
-            min={5}
-            max={180}
-            value={generateDuration ?? ''}
-            onChange={(e) => setGenerateDuration(e.target.value ? Number(e.target.value) : undefined)}
-            placeholder={t('admin.generateLessonDurationHint')}
-          />
-        </label>
-        <label>
-          {t('admin.generateLessonSummary')}
-          <input
-            value={generateSummary}
-            onChange={(e) => setGenerateSummary(e.target.value)}
-            placeholder={t('admin.generateLessonSummaryHint')}
-          />
-        </label>
-        <button
-          type="button"
-          className="button button--accent"
-          disabled={generating || generateMutation.isPending}
-          onClick={() => {
-            setGenerating(true)
-            generateMutation.mutate()
-          }}
-        >
-          {generating || generateMutation.isPending ? t('admin.generating') : t('admin.generateWithAi')}
-        </button>
-      </div>
 
       <label>
         {t('admin.lessonTitle')}

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Repetitor.Api.Domain.Enums;
 
 namespace Repetitor.Api.Domain.Entities;
@@ -58,6 +59,16 @@ public sealed class Lesson
     public Guid? GrammarTopicId { get; set; }
     public GrammarTopic? GrammarTopic { get; set; }
     public string[]? KeyVocabulary { get; set; }
+
+    /// <summary>Состояние фоновой генерации содержимого.</summary>
+    public LessonGenerationStatus AiGenerationStatus { get; set; } = LessonGenerationStatus.None;
+
+    public DateTimeOffset? AiGenerationRequestedAt { get; set; }
+    public DateTimeOffset? AiGenerationCompletedAt { get; set; }
+    public string? AiGenerationError { get; set; }
+
+    /// <summary>Параметры текущего запроса генерации, нужные фоновому воркеру.</summary>
+    public JsonNode? AiGenerationRequest { get; set; }
 }
 
 public sealed class GrammarTopic

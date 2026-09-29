@@ -20,6 +20,7 @@ namespace Repetitor.Api.Api.Controllers;
 public sealed class TeacherController(
     ICatalogDbService catalog,
     IContentGenerationService contentGeneration,
+    ILessonGenerationService lessonGeneration,
     IAiDbService aiDb) : ControllerBase
 {
     private const string AiSettingsKey = "ai.settings";
@@ -259,10 +260,12 @@ public sealed class TeacherController(
     /// Возвращает 404, если урок не найден, и 403, если он принадлежит курсу другого учителя.
     /// </summary>
     [HttpPost("lessons/{id}/generate")]
+    [ProducesResponseType(typeof(LessonGenerationStateResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(GenerateLessonContentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<GenerateLessonContentResponse>> GenerateLesson(
-        Guid id, [FromBody] GenerateLessonContentRequest request, CancellationToken ct)
+        Guid id, [FromBody] GenerateLessonContentRequest request, bool wait = false, CancellationToken ct = default)
     {
         var course = await catalog.GetLessonCourseIdAsync(Actor(), id, ct);
         if (course.Status == CatalogMutationStatus.Forbidden)
@@ -276,13 +279,53 @@ public sealed class TeacherController(
         }
 
         var lessonPrompt = (await aiDb.GetSettingAsync(AiSettingsKey, ct))?["lessonPrompt"]?.ToString();
-        var result = await contentGeneration.GenerateLessonAsync(
-            course.Value, request.Topic, request.Level, request.Requirements, request.Provider, request.Model,
-            lessonPrompt, request.DurationMinutes, request.Summary, ct);
 
-        return Ok(new GenerateLessonContentResponse(
-            result.Title, result.Summary, result.ContentMarkdown, result.KeyVocabulary,
-            result.Provider, result.Model, result.InputTokens, result.OutputTokens));
+        // wait=true сохраняет прежнее поведение: ответ приходит с готовым содержимым.
+        if (wait)
+        {
+            var result = await contentGeneration.GenerateLessonAsync(
+                course.Value, request.Topic, request.Level, request.Requirements, request.Provider, request.Model,
+                lessonPrompt, request.DurationMinutes, request.Summary, ct);
+
+            return Ok(new GenerateLessonContentResponse(
+                result.Title, result.Summary, result.ContentMarkdown, result.KeyVocabulary,
+                result.Provider, result.Model, result.InputTokens, result.OutputTokens));
+        }
+
+        var queued = await lessonGeneration.EnqueueAsync(id, new LessonGenerationRequest(
+            request.Topic, request.Level, request.Requirements, request.DurationMinutes,
+            request.Summary, request.Provider, request.Model, lessonPrompt), ct);
+
+        var state = await lessonGeneration.GetStateAsync(id, ct) ?? new LessonGenerationState(
+            id, LessonGenerationStatus.Queued, null, null, null);
+        var response = state.ToResponse();
+        return queued == LessonGenerationEnqueue.AlreadyActive
+            ? Conflict(response)
+            : Accepted(response);
+    }
+
+    /// <summary>
+    /// Возвращает состояние фоновой генерации урока.
+    /// </summary>
+    [HttpGet("lessons/{id}/generation")]
+    [ProducesResponseType(typeof(LessonGenerationStateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<LessonGenerationStateResponse>> LessonGeneration(Guid id, CancellationToken ct)
+    {
+        var course = await catalog.GetLessonCourseIdAsync(Actor(), id, ct);
+        if (course.Status == CatalogMutationStatus.Forbidden)
+        {
+            return Forbid();
+        }
+
+        if (course.Status == CatalogMutationStatus.NotFound)
+        {
+            return NotFound();
+        }
+
+        var state = await lessonGeneration.GetStateAsync(id, ct);
+        return state is null ? NotFound() : Ok(state.ToResponse());
     }
 
     /// <summary>
@@ -353,5 +396,7 @@ public sealed class TeacherController(
 
     private static AdminLessonResponse ToResponse(AdminLessonItem l) => new(
         l.Id, l.CourseId, l.Slug, l.Title, l.Summary, l.ContentMarkdown, l.SortOrder,
-        l.EstimatedMinutes, l.IsPublished, l.GrammarTopicId, l.KeyVocabulary);
+        l.EstimatedMinutes, l.IsPublished, l.GrammarTopicId, l.KeyVocabulary,
+        l.AiGenerationStatus.ToString(), l.AiGenerationRequestedAt, l.AiGenerationCompletedAt,
+        l.AiGenerationError, l.IsAvailableToStudents);
 }

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Repetitor.Api.Domain.Enums;
+using Repetitor.Api.Infrastructure.Services;
 
 namespace Repetitor.Api.Api.Dto;
 
@@ -59,7 +60,27 @@ public sealed record AdminLessonResponse(
     int EstimatedMinutes,
     bool IsPublished,
     Guid? GrammarTopicId,
-    string[]? KeyVocabulary);
+    string[]? KeyVocabulary,
+    string AiGenerationStatus,
+    DateTimeOffset? AiGenerationRequestedAt,
+    DateTimeOffset? AiGenerationCompletedAt,
+    string? AiGenerationError,
+    bool IsAvailableToStudents);
+
+/// <summary>Состояние фоновой генерации урока.</summary>
+public sealed record LessonGenerationStateResponse(
+    Guid LessonId,
+    string Status,
+    DateTimeOffset? RequestedAt,
+    DateTimeOffset? CompletedAt,
+    string? Error,
+    bool IsActive);
+
+public static class LessonGenerationStateMapper
+{
+    public static LessonGenerationStateResponse ToResponse(this LessonGenerationState state) => new(
+        state.LessonId, state.Status.ToString(), state.RequestedAt, state.CompletedAt, state.Error, state.IsActive);
+}
 
 public sealed class CreateLessonRequest
 {

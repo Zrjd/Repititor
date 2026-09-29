@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Repetitor.Api.Domain.Entities;
+using Repetitor.Api.Domain.Enums;
 
 namespace Repetitor.Api.Infrastructure.Persistence.Configurations;
 
@@ -66,6 +67,14 @@ public sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         b.Property(x => x.Summary).HasMaxLength(1000);
         b.Property(x => x.ContentMarkdown).HasColumnType("text");
         b.Property(x => x.KeyVocabulary).HasColumnType("text[]");
+        // Значение по умолчанию обязательно: иначе существующие уроки получили бы пустую строку,
+        // которую конвертер enum не смог бы прочитать.
+        b.Property(x => x.AiGenerationStatus)
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(LessonGenerationStatus.None);
+        b.Property(x => x.AiGenerationError).HasMaxLength(500);
+        b.HasIndex(x => new { x.AiGenerationStatus, x.AiGenerationRequestedAt });
         b.HasOne(x => x.Course).WithMany(x => x.Lessons)
             .HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne(x => x.GrammarTopic).WithMany()

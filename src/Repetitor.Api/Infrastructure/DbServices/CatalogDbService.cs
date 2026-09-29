@@ -411,6 +411,7 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
         }
 
         var lessons = await db.Lessons
+            .Include(l => l.Course)
             .Where(l => l.CourseId == courseId)
             .OrderBy(l => l.SortOrder)
             .ToListAsync(ct);
@@ -477,6 +478,13 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
             return CatalogMutationResult<AdminLessonItem>.Forbidden();
         }
 
+        // Сравниваем с текущими значениями до присваивания: иначе признак «содержимое изменилось»
+        // всегда был бы ложным.
+        var contentChanged = (update.Title is not null && update.Title != lesson.Title)
+                             || (update.Summary is not null && update.Summary != lesson.Summary)
+                             || (update.ContentMarkdown is not null && update.ContentMarkdown != lesson.ContentMarkdown)
+                             || (update.KeyVocabulary is not null && !VocabularyEquals(update.KeyVocabulary, lesson.KeyVocabulary));
+
         if (update.Slug is not null) lesson.Slug = update.Slug;
         if (update.Title is not null) lesson.Title = update.Title;
         if (update.Summary is not null) lesson.Summary = update.Summary;
@@ -487,8 +495,35 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
         if (update.GrammarTopicId is { } topicId) lesson.GrammarTopicId = topicId;
         if (update.KeyVocabulary is { } vocab) lesson.KeyVocabulary = vocab;
 
+        // Ручная правка означает, что содержимое больше не «свежее из ИИ»:
+        // метка «генерация завершена» снимается, а текущее задание не срывается.
+        if (contentChanged && lesson.AiGenerationStatus is LessonGenerationStatus.Completed or LessonGenerationStatus.Failed)
+        {
+            lesson.AiGenerationStatus = LessonGenerationStatus.None;
+            lesson.AiGenerationError = null;
+            lesson.AiGenerationCompletedAt = null;
+        }
+
         await db.SaveChangesAsync(ct);
         return CatalogMutationResult<AdminLessonItem>.Ok(MapAdminLesson(lesson));
+    }
+
+    private static bool VocabularyEquals(string[] left, string[]? right)
+    {
+        if (right is null || left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Length; i++)
+        {
+            if (!string.Equals(left[i], right[i], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public async Task<CatalogMutationResult<bool>> DeleteLessonAsync(DbActor actor, Guid id, CancellationToken ct)
@@ -572,7 +607,9 @@ public sealed class CatalogDbService(IDbContextFactory<AppDbContext> dbFactory) 
 
     private static AdminLessonItem MapAdminLesson(Lesson lesson) => new(
         lesson.Id, lesson.CourseId, lesson.Slug, lesson.Title, lesson.Summary, lesson.ContentMarkdown,
-        lesson.SortOrder, lesson.EstimatedMinutes, lesson.IsPublished, lesson.GrammarTopicId, lesson.KeyVocabulary);
+        lesson.SortOrder, lesson.EstimatedMinutes, lesson.IsPublished, lesson.GrammarTopicId, lesson.KeyVocabulary,
+        lesson.AiGenerationStatus, lesson.AiGenerationRequestedAt, lesson.AiGenerationCompletedAt,
+        lesson.AiGenerationError, LessonAvailability.IsAvailableToStudents(lesson.IsPublished, lesson.Course?.IsPublished != false));
 
     /// <summary>Строка прогресса по уроку, вырожденная до трёх полей, нужных в каталоге.</summary>
     private sealed record ProgressRow(string Status, int ProgressPercent, int BestScorePercent);

@@ -143,7 +143,8 @@ dailyGoalXp, speechRate, totalXp, currentStreak, longestStreak, emailConfirmed, 
 | GET | `/teacher/lessons/{id}` | данные урока для редактирования |
 | PUT | `/teacher/lessons/{id}` | частичное обновление урока |
 | DELETE | `/teacher/lessons/{id}` | удалить урок |
-| POST | `/teacher/lessons/{id}/generate` | генерация содержания урока через ИИ |
+| POST | `/teacher/lessons/{id}/generate` | поставить генерацию содержания урока в очередь ИИ (`?wait=true` — старый синхронный ответ) |
+| GET | `/teacher/lessons/{id}/generation` | состояние фоновой генерации урока |
 | POST | `/teacher/courses/{id}/generate` | генерация описания и плана уроков курса через ИИ |
 
 ## groups (учебные группы)
@@ -221,8 +222,28 @@ dailyGoalXp, speechRate, totalXp, currentStreak, longestStreak, emailConfirmed, 
 | GET | `/admin/lessons/{id}` | урок для редактирования |
 | PUT | `/admin/lessons/{id}` | частичное обновление урока |
 | DELETE | `/admin/lessons/{id}` | удалить урок |
-| POST | `/admin/lessons/{id}/generate` | генерация содержания урока через ИИ |
+| POST | `/admin/lessons/{id}/generate` | поставить генерацию содержания урока в очередь ИИ (`?wait=true` — старый синхронный ответ) |
+| GET | `/admin/lessons/{id}/generation` | состояние фоновой генерации урока |
 | POST | `/admin/courses/{id}/generate` | генерация описания и плана уроков курса через ИИ |
+
+## Фоновая генерация уроков
+
+`POST /admin/lessons/{id}/generate` и `POST /teacher/lessons/{id}/generate` по умолчанию не ждут ИИ:
+сервер сохраняет запрос в уроке, отвечает `202 Accepted` с текущим состоянием и возвращает управление.
+Фоновый воркер выполняет задания по одному, сам записывает заголовок, описание, Markdown и ключевые слова
+в урок и переводит статус в `Completed`; при ошибке — `Failed` с текстом в `error`.
+
+Состояние (`None`, `Queued`, `Running`, `Completed`, `Failed`) возвращается в списках уроков
+(`aiGenerationStatus`, `aiGenerationRequestedAt`, `aiGenerationCompletedAt`, `aiGenerationError`)
+и отдельным запросом `GET .../lessons/{id}/generation`.
+
+- Повторный запрос, пока генерация активна, возвращает `409` с текущим состоянием.
+- `?wait=true` сохраняет прежнее синхронное поведение: ответ приходит с готовым содержимым.
+- Ручная правка `title`, `summary`, `contentMarkdown` или `keyVocabulary` снимает метку
+  «генерация завершена» (`Completed` → `None`), но не прерывает активную генерацию.
+- `isAvailableToStudents` — черновик, если урок или его курс не опубликованы.
+- Настройки: `Generation:WorkerEnabled`, `Generation:PollSeconds`, `Generation:StaleAfterMinutes`,
+  `Generation:MaxErrorLength`. После перезапуска API задания в статусе `Running` возвращаются в очередь.
 
 ## Служебные
 

@@ -26,6 +26,7 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptio
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
 builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection(MediaOptions.SectionName));
 builder.Services.Configure<LearningOptions>(builder.Configuration.GetSection(LearningOptions.SectionName));
+builder.Services.Configure<GenerationOptions>(builder.Configuration.GetSection(GenerationOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || Encoding.UTF8.GetByteCount(jwtOptions.SigningKey) < 32)
@@ -67,6 +68,8 @@ builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IVectorSearchService, VectorSearchService>();
 builder.Services.AddScoped<IExerciseGeneratorService, ExerciseGeneratorService>();
 builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
+builder.Services.AddScoped<ILessonGenerationService, LessonGenerationService>();
+builder.Services.AddHostedService<LessonGenerationWorker>();
 builder.Services.AddScoped<ITutorChatService, TutorChatService>();
 builder.Services.AddScoped<IAnswerGradingService, AnswerGradingService>();
 builder.Services.AddScoped<IPronunciationService, PronunciationService>();

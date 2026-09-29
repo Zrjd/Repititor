@@ -122,3 +122,16 @@ public enum LessonProgressStatus
     InProgress = 1,
     Completed = 2
 }
+
+/// <summary>
+/// Состояние фоновой генерации содержимого урока.
+/// </summary>
+public enum LessonGenerationStatus
+{
+    /// <summary>Генерация не запрашивалась либо результат уже вручную изменили.</summary>
+    None = 0,
+    Queued = 1,
+    Running = 2,
+    Completed = 3,
+    Failed = 4
+}
