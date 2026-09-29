@@ -1,5 +1,8 @@
+using System.Net;
+using System.Text.Json;
 using Repetitor.Api.Api.Dto;
 using Repetitor.Api.Domain.Enums;
+using Repetitor.Api.Infrastructure.Ai;
 using Repetitor.Api.Infrastructure.DbServices;
 using Repetitor.Api.Infrastructure.Services;
 
@@ -139,5 +142,75 @@ public sealed class AdminLessonMappingTests
         bool lessonPublished, bool coursePublished, bool expected)
     {
         Assert.Equal(expected, LessonAvailability.IsAvailableToStudents(lessonPublished, coursePublished));
+    }
+}
+
+public sealed class LessonGenerationFailureTests
+{
+    [Fact]
+    public void ProviderTimeout_IsReportedAsAModelTimeout()
+    {
+        // HttpClient при своём таймауте бросает TaskCanceledException, под ним TimeoutException,
+        // а дальше ещё несколько обёрток вплоть до сокета.
+        var exception = new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout of 30 seconds elapsing.",
+            new TimeoutException(
+                "The operation was canceled.",
+                new TaskCanceledException(
+                    "The operation was canceled.",
+                    new IOException("Unable to read data from the transport connection: Operation canceled."))));
+
+        var message = LessonGenerationFailure.Describe(exception, 900);
+
+        Assert.Equal("Модель не ответила за 900 с. Для локальной модели увеличьте Ai:Providers:*:TimeoutSeconds.", message);
+    }
+
+    [Fact]
+    public void ProviderTimeoutInsideProviderException_IsStillAModelTimeout()
+    {
+        var exception = new AiProviderException(
+            "ollama",
+            null,
+            "generation failed",
+            new TaskCanceledException("timeout", new TimeoutException()));
+
+        Assert.StartsWith("Модель не ответила за 120 с", LessonGenerationFailure.Describe(exception, 120), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProviderHttpError_KeepsTheStatusCode()
+    {
+        var exception = new AiProviderException("ollama", HttpStatusCode.NotFound, "model not found");
+
+        var message = LessonGenerationFailure.Describe(exception, 120);
+
+        Assert.StartsWith("Провайдер ИИ ответил ошибкой 404", message, StringComparison.Ordinal);
+        Assert.Contains("model not found", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnreachableProvider_IsReportedWithoutAStatusCode()
+    {
+        var exception = new AiProviderException("ollama", null, "connection refused");
+
+        var message = LessonGenerationFailure.Describe(exception, 120);
+
+        Assert.StartsWith("Провайдер ИИ недоступен", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MalformedAnswer_IsReportedAsAFormatProblem()
+    {
+        var message = LessonGenerationFailure.Describe(new JsonException("unexpected token"), 120);
+
+        Assert.Equal("Модель вернула ответ не в ожидаемом формате.", message);
+    }
+
+    [Fact]
+    public void UnknownFailure_KeepsTheUnderlyingMessage()
+    {
+        var exception = new InvalidOperationException("outer", new InvalidOperationException("внутренняя причина"));
+
+        Assert.Equal("внутренняя причина", LessonGenerationFailure.Describe(exception, 120));
     }
 }

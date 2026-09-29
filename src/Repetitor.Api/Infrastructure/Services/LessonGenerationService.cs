@@ -62,6 +62,7 @@ public sealed class LessonGenerationService(
     IContentGenerationService contentGeneration,
     IClock clock,
     IOptions<GenerationOptions> options,
+    IOptions<AiOptions> aiOptions,
     ILogger<LessonGenerationService> logger) : ILessonGenerationService
 {
     private readonly GenerationOptions _options = options.Value;
@@ -114,7 +115,7 @@ public sealed class LessonGenerationService(
         var lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == lessonId, ct);
         if (lesson?.AiGenerationRequest is null)
         {
-            await MarkFailed(db, lesson, lessonId, "Задание потеряло параметры генерации", ct);
+            await MarkFailedAsync(lessonId, "Задание потеряло параметры генерации", ct);
             return true;
         }
 
@@ -146,12 +147,10 @@ public sealed class LessonGenerationService(
                 "AI generation for lesson {LessonId} completed: {Provider}/{Model}, tokens {In}/{Out}",
                 lessonId, result.Provider, result.Model, result.InputTokens, result.OutputTokens);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "AI generation for lesson {LessonId} failed", lessonId);
-            db.ChangeTracker.Clear();
-            lesson = await db.Lessons.FirstOrDefaultAsync(l => l.Id == lessonId, ct);
-            await MarkFailed(db, lesson, lessonId, ex.Message, ct);
+            await MarkFailedAsync(lessonId, LessonGenerationFailure.Describe(ex, TimeoutSeconds), ct);
         }
 
         return true;
@@ -203,23 +202,91 @@ public sealed class LessonGenerationService(
         return claimed == 1 ? candidate : Guid.Empty;
     }
 
-    private async Task MarkFailed(AppDbContext db, Lesson? lesson, Guid lessonId, string message, CancellationToken ct)
+    private async Task MarkFailedAsync(Guid lessonId, string message, CancellationToken ct)
     {
-        if (lesson is null)
+        var error = AiText.Truncate(message, _options.MaxErrorLength);
+        try
         {
-            logger.LogWarning("Lesson {LessonId} disappeared while generating", lessonId);
-            return;
-        }
+            // Прямой UPDATE: статус не зависит от трекинга сущности, который к этому моменту
+            // может быть в произвольном состоянии после неудачного запроса к модели.
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var completedAt = clock.UtcNow;
+            var updated = await db.Lessons
+                .Where(l => l.Id == lessonId)
+                .ExecuteUpdateAsync(s =>
+                {
+                    s.SetProperty(l => l.AiGenerationStatus, LessonGenerationStatus.Failed);
+                    s.SetProperty(l => l.AiGenerationCompletedAt, completedAt);
+                    s.SetProperty(l => l.AiGenerationError, error);
+                }, ct);
 
-        lesson.AiGenerationStatus = LessonGenerationStatus.Failed;
-        lesson.AiGenerationCompletedAt = clock.UtcNow;
-        lesson.AiGenerationError = AiText.Truncate(message, _options.MaxErrorLength);
-        await db.SaveChangesAsync(ct);
+            if (updated == 0)
+            {
+                logger.LogWarning("Lesson {LessonId} disappeared while generating", lessonId);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Статус не записался: урок остаётся в Running и его вернёт в очередь
+            // Generation:StaleAfterMinutes либо следующий запуск API.
+            logger.LogError(ex, "Could not mark lesson {LessonId} as failed: {Error}", lessonId, error);
+        }
     }
 
     private static JsonObject ToJson(LessonGenerationRequest request) => LessonGenerationJson.Write(request);
 
     private static LessonGenerationRequest FromJson(JsonNode json) => LessonGenerationJson.Read(json);
+
+    /// <summary>Таймаут провайдера для текста ошибки: тот же, что уходит в запрос модели.</summary>
+    private int TimeoutSeconds
+    {
+        get
+        {
+            var ai = aiOptions.Value;
+            var timeout = ai.Providers.TryGetValue(ai.DefaultChatProvider, out var provider)
+                ? provider.TimeoutSeconds
+                : 120;
+            return Math.Clamp(timeout, 30, 900);
+        }
+    }
+}
+
+/// <summary>Причину сбоя показываем пользователю по-человечески, детали остаются в логах.</summary>
+public static class LessonGenerationFailure
+{
+    public static string Describe(Exception exception, int timeoutSeconds)
+    {
+        var root = exception;
+        while (root.InnerException is not null)
+        {
+            root = root.InnerException;
+        }
+
+        // Таймаут HttpClient приходит пачкой вложенных исключений вплоть до сокета,
+        // поэтому ищем его в любом уровне цепочки, а не только в последнем.
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is TimeoutException or TaskCanceledException or OperationCanceledException)
+            {
+                return $"Модель не ответила за {timeoutSeconds} с. Для локальной модели увеличьте Ai:Providers:*:TimeoutSeconds.";
+            }
+        }
+
+        if (root is System.Text.Json.JsonException or FormatException)
+        {
+            return "Модель вернула ответ не в ожидаемом формате.";
+        }
+
+        if (exception is AiProviderException provider)
+        {
+            var text = provider.StatusCode is { } code
+                ? $"Провайдер ИИ ответил ошибкой {(int)code}"
+                : "Провайдер ИИ недоступен";
+            return $"{text}: {root.Message}";
+        }
+
+        return root.Message;
+    }
 }
 
 /// <summary>
@@ -269,6 +336,7 @@ public static class LessonGenerationJson
 public sealed class LessonGenerationWorker(
     IServiceScopeFactory scopeFactory,
     IOptions<GenerationOptions> options,
+    IClock clock,
     ILogger<LessonGenerationWorker> logger) : BackgroundService
 {
     private readonly GenerationOptions _options = options.Value;
@@ -286,16 +354,23 @@ public sealed class LessonGenerationWorker(
 
         await RunSafelyAsync(() => RecoverAsync(stoppingToken), stoppingToken);
 
+        var staleEvery = TimeSpan.FromMinutes(Math.Max(1, _options.StaleAfterMinutes));
+        var nextStaleCheck = clock.UtcNow + staleEvery;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var processed = false;
             await RunSafelyAsync(async () =>
             {
-                processed = await WithScopeAsync(s => s.RunNextAsync(stoppingToken), stoppingToken);
-                if (processed)
+                // Зависшие задания возвращаются в очередь по своему расписанию, а не только
+                // после успешно обработанного запроса: иначе пустая очередь никогда бы их не подобрала.
+                if (clock.UtcNow >= nextStaleCheck)
                 {
+                    nextStaleCheck = clock.UtcNow + staleEvery;
                     await WithScopeAsync(s => s.RequeueStaleAsync(false, stoppingToken), stoppingToken);
                 }
+
+                processed = await WithScopeAsync(s => s.RunNextAsync(stoppingToken), stoppingToken);
             }, stoppingToken);
 
             // Пока очередь не кончилась, новые задания берём без паузы.
