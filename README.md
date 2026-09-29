@@ -135,9 +135,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 | `Ai:DefaultEmbeddingProvider` | `openai` или `ollama` | `openai` |
 | `Ai:Providers:openai:ApiKey` | ключ OpenAI | пусто |
 | `Ai:Providers:ollama:BaseUrl` | адрес Ollama | `http://localhost:11434/` |
+| `Ai:Providers:*:TimeoutSeconds` | таймаут запроса к провайдеру, секунды (в том числе простоя в стриме) | `120` |
 | `Ai:MaxRagContextItems` | сколько найденных слов попадает в RAG-контекст | 8 |
 | `Ai:RagMinSimilarity` | порог cosine-релевантности для RAG | 0.25 |
 | `Ai:EmbeddingDimensions` / `Ai:EmbeddingLocalDimensions` | размерность векторов (remote/local) | 1536 / 1024 |
+| `Generation:WorkerEnabled` | фоновый воркер генерации уроков в этом процессе | `true` |
+| `Generation:PollSeconds` | как часто воркер ищет новые задания | `5` |
+| `Generation:StaleAfterMinutes` | через сколько минут зависшее `Running` возвращается в очередь | `30` |
 | `Media:RootPath` | каталог загрузок | `media` |
 | `Learning:NewCardsPerDay` | лимит новых SRS-карточек в день | 20 |
 | `Learning:MaxFreeAiCallsPerDay` | лимит AI-вызовов пользователя в день | 100 |
@@ -169,7 +173,7 @@ opaque-значения, в БД лежит только SHA-256 хеш; `logout
 | --- | --- | --- |
 | Auth | `/api/v1/auth` | register, login, refresh, logout, me, смена/сброс пароля |
 | Users | `/api/v1/users` | профиль, дашборд, статистика, учебная цель |
-| Catalog | `/api/v1/catalog` | языки, курсы, уроки, грамматика |
+| Catalog | `/api/v1/catalog` | языки, курсы, уроки, грамматика; генерация урока AI ставится в фоновую очередь |
 | Dictionary | `/api/v1/dictionary` | поиск слов, CRUD, импорт, мои слова, word of the day, TTS |
 | Decks | `/api/v1/decks` | SRS-колоды и карточки |
 | Practice | `/api/v1/practice` | due-карточки, отзывы, summary, forecast, embeddings |

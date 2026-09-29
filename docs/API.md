@@ -244,6 +244,9 @@ dailyGoalXp, speechRate, totalXp, currentStreak, longestStreak, emailConfirmed, 
 - `isAvailableToStudents` — черновик, если урок или его курс не опубликованы.
 - Настройки: `Generation:WorkerEnabled`, `Generation:PollSeconds`, `Generation:StaleAfterMinutes`,
   `Generation:MaxErrorLength`. После перезапуска API задания в статусе `Running` возвращаются в очередь.
+- `Failed` с текстом про таймаут означает, что модель не уложилась в
+  `Ai:Providers:*:TimeoutSeconds` (по умолчанию 120 секунд; тишина в стриме считается
+  зависанием). Для локальной модели на CPU увеличьте значение, например до 900, и пересоздайте API.
 
 ## Служебные
 

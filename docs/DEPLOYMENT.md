@@ -47,6 +47,7 @@ docker compose down -v                # остановить и удалить �
 OLLAMA_BASE_URL=http://host.docker.internal:11434/
 OLLAMA_CHAT_MODEL=Qwen3:8b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+OLLAMA_TIMEOUT_SECONDS=900
 ```
 
 ```bash
@@ -69,6 +70,14 @@ curl -fsS -X POST http://localhost:8080/api/v1/admin/ai-settings/test?provider=o
 | `OLLAMA_PORT` | публикация порта сервиса `ollama` | `11434` |
 | `OLLAMA_CHAT_MODEL` | модель чата | `qwen2.5:7b-instruct` |
 | `OLLAMA_EMBEDDING_MODEL` | модель эмбеддингов | `nomic-embed-text` |
+| `OLLAMA_TIMEOUT_SECONDS` | таймаут запроса к Ollama, секунды | `120` |
+
+`OLLAMA_TIMEOUT_SECONDS` действует и на стриминговые ответы: `ResponseHeadersRead` снимает
+`HttpClient.Timeout` сразу после заголовков, поэтому простой в потоке считается зависанием
+ровно по этому значению. Локальная модель на CPU думает 5–10 минут, и запас в 120 секунд
+приводит к тому, что нормальная генерация урока падает с `TimeoutException` и урок уходит
+в ошибку; для Ollama на хосте разумно ставить `900`. Максимум — 900 секунд, значения вне
+диапазона 30–900 приводятся к границам.
 
 ## Ручное развёртывание
 
@@ -89,6 +98,7 @@ export Seed__AdminEmail=admin@example.com
 export Seed__AdminPassword='<сильный пароль>'
 export Ai__DefaultChatProvider=ollama
 export Ai__Providers__ollama__BaseUrl=http://127.0.0.1:11434/
+export Ai__Providers__ollama__TimeoutSeconds=900
 export Media__RootPath=/var/lib/repetitor/media
 ```
 
