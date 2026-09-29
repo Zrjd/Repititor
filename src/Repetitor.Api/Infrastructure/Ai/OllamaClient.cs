@@ -89,8 +89,9 @@ public sealed class OllamaClient(
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream, Encoding.UTF8);
+        var idleTimeout = AiHttp.IdleTimeout(options.TimeoutSeconds);
 
-        while (await reader.ReadLineAsync(ct) is { } line)
+        while (await AiHttp.ReadLineWithIdleTimeoutAsync(reader, idleTimeout, providerName, ct) is { } line)
         {
             ct.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(line))

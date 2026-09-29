@@ -9,6 +9,85 @@ using Repetitor.Api.Infrastructure.Persistence;
 
 namespace Repetitor.Api.Infrastructure.Services;
 
+/// <summary>
+/// Системный промпт для генерации урока. Пользовательский промпт преподавателя
+/// дополняет контракт ответа, но не заменяет его: без схемы JSON небольшая модель
+/// возвращает свободный текст и уходит в чужой язык.
+/// </summary>
+public static class LessonPrompts
+{
+    public static string BuildSystem(
+        string? customPrompt,
+        string targetLanguageEnglish,
+        Language interfaceLanguage,
+        CefrLevel level)
+    {
+        var contract = $$"""
+            You are an expert {{targetLanguageEnglish}} course author. Write a full lesson for CEFR {{level}} learners.
+            The learner's interface language is {{interfaceLanguage.NameEnglish}}.
+            Return a single valid JSON object with this exact shape:
+            {
+              "title": "lesson title in {{targetLanguageEnglish}}",
+              "summary": "one-sentence summary in {{interfaceLanguage.NameEnglish}}",
+              "content_markdown": "lesson body in {{targetLanguageEnglish}} using markdown: ## sections, examples, dialogues, grammar notes",
+              "key_vocabulary": ["5-8 words or short phrases from the lesson"]
+            }
+            Rules: content must be accurate, level-appropriate, and pedagogically structured.
+            Write the lesson about the topic from the last line of the user request and about nothing else.
+            The field "title" must name that topic; the rest of the lesson must stay on it.
+            The field "summary" must be written in {{interfaceLanguage.NameEnglish}} ({{interfaceLanguage.NativeName}}) only. Never write it in another language.
+            """;
+
+        if (string.IsNullOrWhiteSpace(customPrompt))
+        {
+            return contract;
+        }
+
+        return $$"""
+            {{customPrompt.Trim()}}
+
+            Additional instructions from the teacher are above. The answer must still follow this contract:
+            {{contract}}
+            """;
+    }
+
+    /// <summary>
+    /// Тема идёт последней строкой и в императиве: небольшие модели читают конец запроса
+    /// как приоритетное и иначе подменяют тему «своим» типовым уроком.
+    /// </summary>
+    public static string BuildUser(
+        string courseTitle,
+        string? topic,
+        CefrLevel level,
+        int? durationMinutes,
+        string? summary,
+        string? requirements)
+    {
+        var lines = new List<string> { $"Course: {courseTitle}", $"Level: CEFR {level}" };
+
+        if (durationMinutes is > 0)
+        {
+            lines.Add($"Duration: {durationMinutes} minutes");
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary))
+        {
+            lines.Add($"Lesson summary: {summary.Trim()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(requirements))
+        {
+            lines.Add($"Additional requirements: {requirements.Trim()}");
+        }
+
+        lines.Add(string.IsNullOrWhiteSpace(topic)
+            ? "Lesson topic: choose one fitting topic for this course and level."
+            : $"Lesson topic (mandatory, do not change, do not replace with another theme): {topic.Trim()}");
+
+        return string.Join('\n', lines);
+    }
+}
+
 public sealed record LessonContentGeneration(
     string Title,
     string? Summary,
@@ -89,28 +168,9 @@ public sealed class ContentGenerationService(
         var interfaceLang = await db.Languages.OrderBy(l => l.SortOrder).ThenBy(l => l.Code).FirstAsync(ct);
         var lessonLevel = level ?? course.Level;
 
-        var system = lessonPrompt ?? $$"""
-            You are an expert {{target.NameEnglish}} course author. Write a full lesson for CEFR {{lessonLevel}} learners.
-            The learner's interface language is {{interfaceLang.NameEnglish}}.
-            Return a single valid JSON object with this exact shape:
-            {
-              "title": "lesson title in {{target.NameEnglish}}",
-              "summary": "one-sentence summary in {{interfaceLang.NameEnglish}}",
-              "content_markdown": "lesson body in {{target.NameEnglish}} using markdown: ## sections, examples, dialogues, grammar notes",
-              "key_vocabulary": ["5-8 words or short phrases from the lesson"]
-            }
-            Rules: content must be accurate, level-appropriate, and pedagogically structured.
-            The field "summary" must be written in {{interfaceLang.NameEnglish}} ({{interfaceLang.NativeName}}) only. Never write it in another language.
-            """;
+        var system = LessonPrompts.BuildSystem(lessonPrompt, target.NameEnglish, interfaceLang, lessonLevel);
 
-        var user = $"""
-            Course: {course.Title}
-            Topic: {topic ?? "choose a fitting topic for this course and level"}
-            Level: CEFR {lessonLevel}
-            {(durationMinutes is > 0 ? $"Duration: {durationMinutes} minutes" : "")}
-            {(string.IsNullOrWhiteSpace(summary) ? "" : $"Summary: {summary}")}
-            {(string.IsNullOrWhiteSpace(requirements) ? "" : $"Requirements: {requirements}")}
-            """;
+        var user = LessonPrompts.BuildUser(course.Title, topic, lessonLevel, durationMinutes, summary, requirements);
 
         var (result, summaryText) = await EnsureLanguageAsync(
             new JsonObject

@@ -266,6 +266,39 @@ internal static class AiHttp
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Читает очередную строку потока с ограничением по времени ожидания данных.
+    /// HttpClient.Timeout при ResponseHeadersRead больше не действует, поэтому без этого
+    /// провайдер, который принял соединение и замолчал, держит вызывающий поток вечно.
+    /// </summary>
+    public static async Task<string?> ReadLineWithIdleTimeoutAsync(
+        StreamReader reader,
+        TimeSpan idleTimeout,
+        string providerName,
+        CancellationToken ct)
+    {
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        read.CancelAfter(idleTimeout);
+        try
+        {
+            return await reader.ReadLineAsync(read.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new AiProviderException(
+                providerName,
+                HttpStatusCode.RequestTimeout,
+                $"{providerName} chat stream stalled: no data for {idleTimeout.TotalSeconds:0}s");
+        }
+    }
+
+    /// <summary>
+    /// Паймаут простоя для стриминга: ждать можно долго (локальная модель думает минутами),
+    /// но молчание провайдера дольше этого времени считаем зависанием.
+    /// </summary>
+    public static TimeSpan IdleTimeout(int timeoutSeconds) =>
+        TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 30, 900));
+
     public static HttpClient Create(AiProviderOptions options, string name)
     {
         var client = new HttpClient
